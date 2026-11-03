@@ -109,7 +109,14 @@ public:
             GPU=MakeUnique<PRTGI::FRuntimeGPU>();GPU->Submit(Scene,1);Started=FPlatformTime::Seconds();
         }
         TArray<FVector4f> SH;
-        if(!GPU->Tick(SH))
+        // Room scheduling must retire pending work without granting another
+        // dispatch. Alternate grants and pauses, including the initial tick.
+        const bool AllowSubmission=(++Ticks%2)==0;
+        const bool WasPending=GPU->HasPendingSubmission();
+        const bool Finished=GPU->Tick(SH,AllowSubmission);
+        if(!AllowSubmission && !WasPending)
+            Test->TestFalse(TEXT("Paused solver cannot submit GPU work"),GPU->HasPendingSubmission());
+        if(!Finished)
         { if(FPlatformTime::Seconds()-Started<30)return false;Test->AddError(TEXT("Cache analytic timeout"));return true; }
         const auto& Cache=GPU->CacheResultForTest();
         if(!Test->TestEqual(TEXT("Full diagnostic cache"),Cache.Num(),16) || !Test->TestEqual(TEXT("Probe SH"),SH.Num(),9))return true;
@@ -137,7 +144,7 @@ private:
     TSharedPtr<PRTGI::FRuntimeSurfelSnapshot,ESPMode::ThreadSafe> Snapshot;
     TUniquePtr<PRTGI::FRuntimeGPU> GPU;
     TArray<FVector4f> Previous;
-    int32 Stage=0,Iterations=0;float Alpha=1;double Started=0;
+    int32 Stage=0,Iterations=0,Ticks=0;float Alpha=1;double Started=0;
 };
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPRTCacheAnalytic,"PRTGI.Runtime.SurfelCacheAnalytic",
     EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter|EAutomationTestFlags::NonNullRHI)

@@ -41,6 +41,7 @@ TAutoConsoleVariable<int32> CacheBatch(TEXT("r.PRTGI.Runtime.CacheBatch"),256,TE
 TAutoConsoleVariable<float> CacheRelaxation(TEXT("r.PRTGI.Runtime.CacheRelaxation"),1.f,TEXT("0.1..1 Jacobi relaxation. Values below 1 converge more slowly and do not represent a fixed bounce count."));
 TAutoConsoleVariable<int32> CacheBatchesPerSubmit(TEXT("r.PRTGI.Runtime.CacheBatchesPerSubmit"),8,TEXT("1..32 cache dispatches per GPU submission, never crossing a Jacobi sweep. Fixed work count, not ms."));
 TAutoConsoleVariable<int32> KeepLighting(TEXT("r.PRTGI.Runtime.KeepLightingWhileUpdating"),1,TEXT("Keep published cache lighting while geometry/probe layout is unchanged. Geometry edits still clear old GI."));
+TAutoConsoleVariable<int32> RoomsEnabled(TEXT("r.PRTGI.Runtime.Rooms"),0,TEXT("Opt-in independent room jobs. Each enabled volume requires explicit Runtime Included Actors or Participant Tags. Shared lights affect all rooms."));
 bool NeedsSurfelPool() { return SurfelPoolEnabled.GetValueOnGameThread()!=0 || UseSurfelCache.GetValueOnGameThread()!=0; }
 struct FHash
 {
@@ -117,7 +118,7 @@ FString AssetKey(UStaticMeshComponent* C)
     if(!C->LODData.IsEmpty() && C->LODData[0].OverrideVertexColors)H.String(C->GetPathName());
     return FString::Printf(TEXT("%s:%08x"),*C->GetStaticMesh()->GetPathName(),H.Value);
 }
-TArray<FInstance> Instances(UWorld* World)
+TArray<FInstance> Instances(UWorld* World,const APRTProbeVolume* Room=nullptr)
 {
     TArray<FInstance> Result;
     for(TActorIterator<AActor> It(World);It;++It)
@@ -127,6 +128,13 @@ TArray<FInstance> Instances(UWorld* World)
         for(auto* C:Components)
         {
             if(!C->IsVisible() || !C->IsRegistered() || !C->GetStaticMesh() || C->ComponentHasTag(TEXT("PRTGI.Ignore")))continue;
+            if(Room)
+            {
+                bool Included=Room->RuntimeIncludedActors.Contains(*It);
+                for(const FName Tag:Room->RuntimeParticipantTags)
+                    Included|=It->ActorHasTag(Tag) || C->ComponentHasTag(Tag);
+                if(!Included)continue;
+            }
             const FString Key=AssetKey(C);
             if(auto* ISM=Cast<UInstancedStaticMeshComponent>(C))
             {
@@ -253,11 +261,11 @@ TArray<FVector4f> ReadLights(UWorld* World)
     }
     return Result;
 }
-bool ReadVolumes(UWorld* World,FRuntimeScene& Scene,FString& Error)
+bool ReadVolumes(UWorld* World,FRuntimeScene& Scene,FString& Error,const APRTProbeVolume* Room)
 {
     for(TActorIterator<APRTProbeVolume> It(World);It;++It)
     {
-        if(!It->bEnabled)continue;
+        if(!It->bEnabled || (Room && *It!=Room))continue;
         FBox Grid,Receiver;FIntVector Counts;if(!It->GetLayout(Grid,Receiver,Counts,Error))return false;
         const int64 Count=int64(Counts.X)*Counts.Y*Counts.Z;
         if(Count<1 || Count+Scene.Probes.Num()>32768) { Error=TEXT("PC reference supports at most 32768 probes; reduce volume density");return false; }
@@ -281,11 +289,12 @@ uint32 Signature(const TArray<FInstance>& Items,const FRuntimeScene& Scene,uint3
     H.Add(Scene.Rays);H.Add(Scene.Bounces);H.Add(UseSurfelCache.GetValueOnGameThread());
     H.Add(Scene.CacheIterations);H.Add(Scene.CacheRays);H.Add(Scene.CacheBatch);H.Add(Scene.CacheRelaxation);H.Add(Scene.CacheBatchesPerSubmit);H.Add(KeepLighting.GetValueOnGameThread());return H.Value;
 }
-void SetVolumeStatus(UWorld* World,const FString& Message,const TArray<FPRTGIRenderVolume>& Published,int32 BounceCount)
+void SetVolumeStatus(UWorld* World,const FString& Message,const TArray<FPRTGIRenderVolume>& Published,int32 BounceCount,const APRTProbeVolume* Room)
 {
     int32 Index=0;
     for(TActorIterator<APRTProbeVolume> It(World);It;++It)
     {
+        if(Room && *It!=Room)continue;
         const bool Ready=It->bEnabled && Published.IsValidIndex(Index);
         It->bGIActive=Ready;It->CacheStatus=Message;It->EffectiveBounces=Ready?BounceCount:0;
         It->ValidProbes=It->InvalidProbes=0;
@@ -303,6 +312,11 @@ void SetVolumeStatus(UWorld* World,const FString& Message,const TArray<FPRTGIRen
 struct FRuntimeGI::FState
 {
     TWeakObjectPtr<UWorld> World;
+    bool RoomsActive=false;
+    TMap<FObjectKey,TUniquePtr<FRuntimeGI>> Rooms;
+    TArray<FObjectKey> RoomOrder;
+    int32 NextRoom=0;
+    uint32 SurfelCapacity=0;
     TMap<FString,TSharedPtr<FAsset>> Assets;
     // Only transforms present in the current snapshot survive. Moving one
     // chair does not re-transform every sphere's 64 material samples/triangle.
@@ -348,21 +362,71 @@ FString FRuntimeGI::Prepare(UWorld* World)
 }
 bool FRuntimeGI::Tick(UWorld* World)
 {
+    const bool Rooms=RoomsEnabled.GetValueOnGameThread()!=0;
+    if(State->World.Get()!=World || State->RoomsActive!=Rooms)
+    { Reset();State->World=World;State->RoomsActive=Rooms; }
+    return Rooms?TickRooms(World):TickInternal(World,true);
+}
+bool FRuntimeGI::TickRooms(UWorld* World)
+{
+    auto& S=*State;if(!World)return false;
+    TArray<APRTProbeVolume*> Volumes;
+    for(TActorIterator<APRTProbeVolume> It(World);It;++It)
+        if(It->bEnabled)Volumes.Add(*It);
+        else { It->bGIActive=false;It->ValidProbes=It->InvalidProbes=0;It->EffectiveBounces=0;It->CacheStatus=TEXT("Runtime room: disabled"); }
+    Volumes.Sort([](const APRTProbeVolume& A,const APRTProbeVolume& B){return A.GetPathName()<B.GetPathName();});
+    TArray<FObjectKey> Order;for(auto* V:Volumes)Order.Add(FObjectKey(V));
+    bool Dirty=S.Invalidated || Order!=S.RoomOrder;S.Invalidated=false;
+    for(auto It=S.Rooms.CreateIterator();It;++It)if(!Order.Contains(It.Key()))It.RemoveCurrent();
+    S.RoomOrder=Order;
+    for(auto* V:Volumes)
+    {
+        const FObjectKey Key(V);
+        if(!S.Rooms.Contains(Key))
+        {
+            auto Worker=MakeUnique<FRuntimeGI>();Worker->bRoomWorker=true;Worker->RoomVolume=V;
+            Worker->State->World=World;Worker->State->Assets=S.Assets;
+            S.Rooms.Add(Key,MoveTemp(Worker));
+        }
+    }
+    // One shared in-flight lighting submission, round-robin across rooms.
+    // Always retire completed work, even when this room has no submission grant.
+    bool Pending=false;
+    for(const auto& Pair:S.Rooms)Pending|=Pair.Value->State->GPU && Pair.Value->State->GPU->HasPendingSubmission();
+    int32 Selected=INDEX_NONE;
+    if(!Pending && !Order.IsEmpty())for(int32 I=0;I<Order.Num();++I)
+    {
+        const int32 Index=(S.NextRoom+I)%Order.Num();
+        if(S.Rooms.FindChecked(Order[Index])->State->GPU)
+        { Selected=Index;S.NextRoom=(Index+1)%Order.Num();break; }
+    }
+    for(int32 I=0;I<Order.Num();++I)Dirty|=S.Rooms.FindChecked(Order[I])->TickInternal(World,I==Selected);
+    if(Dirty)
+    {
+        S.Published.Reset();
+        for(const auto& Key:Order)S.Published.Append(S.Rooms.FindChecked(Key)->GetVolumes());
+    }
+    return Dirty;
+}
+bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
+{
     auto& S=*State;
     if(S.World.Get()!=World) { Reset();State->World=World;return true; }
+    const APRTProbeVolume* Room=bRoomWorker?RoomVolume.Get():nullptr;
+    if(bRoomWorker && !Room)return false;
     if(S.Surfels)
     {
         FString Audit;bool Passed=false;
         if(S.Surfels->PollAudit(Audit,Passed))
         {
             S.LastSurfelAudit=Audit;UE_LOG(LogPRTRuntime,Display,TEXT("%s"),*Audit);
-            const FString Path=FPaths::ProjectSavedDir()/TEXT("PRTGIRuntime/surfel-audit.txt");
+            const FString Path=FPaths::ProjectSavedDir()/(Room?FString::Printf(TEXT("PRTGIRuntime/room-%s-surfel-audit.txt"),*Room->VolumeId.ToString()):TEXT("PRTGIRuntime/surfel-audit.txt"));
             IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path),true);FFileHelper::SaveStringToFile(Audit,*Path);
         }
     }
     const double Now=FPlatformTime::Seconds();
     const bool Invalidated=S.Invalidated;S.Invalidated=false;
-    TArray<FVector4f> Output;const bool Finished=S.GPU && S.GPU->Tick(Output);
+    TArray<FVector4f> Output;const bool Finished=S.GPU && S.GPU->Tick(Output,bAllowSubmission);
     if(Now<S.NextScan && !Finished)return false;
     S.NextScan=Now+.25;
     auto Scene=MakeShared<FRuntimeScene,ESPMode::ThreadSafe>();Scene->Rays=FMath::Clamp(Rays.GetValueOnGameThread(),64,1024);
@@ -373,13 +437,30 @@ bool FRuntimeGI::Tick(UWorld* World)
     Scene->CacheBatchesPerSubmit=FMath::Clamp(CacheBatchesPerSubmit.GetValueOnGameThread(),1,32);
     Scene->CacheRelaxation=FMath::Clamp(CacheRelaxation.GetValueOnGameThread(),.1f,1.f);
     FString Error;
-    if(!ReadVolumes(World,*Scene,Error))
+    if(!ReadVolumes(World,*Scene,Error,Room))
     { const bool Dirty=Invalidated || !S.Published.IsEmpty();S.Error=Error;S.GPU.Reset();S.SolvedCache.Reset();S.Job.Reset();S.Published.Reset();S.HoldingLighting=false;S.Requested=0;
-      SetVolumeStatus(World,TEXT("Runtime: ")+Error,S.Published,0);return Dirty; }
-    uint32 GeometrySignature=0;const auto Items=Instances(World);const uint32 Current=Signature(Items,*Scene,GeometrySignature);
+      SetVolumeStatus(World,TEXT("Runtime: ")+Error,S.Published,0,Room);return Dirty; }
+    const auto Items=Instances(World,Room);
+    if(Room && Items.IsEmpty())
+    {
+        const bool Dirty=Invalidated || !S.Published.IsEmpty();
+        S.Error=TEXT("Runtime room has no eligible geometry: assign Runtime Included Actors or Participant Tags");
+        S.GPU.Reset();S.SolvedCache.Reset();S.Job.Reset();S.Published.Reset();S.Surfels.Reset();S.SurfelCapacity=0;
+        S.HoldingLighting=false;S.Requested=0;S.Instances=S.Triangles=0;
+        SetVolumeStatus(World,S.Error,S.Published,0,Room);return Dirty;
+    }
+    uint32 GeometrySignature=0;const uint32 Current=Signature(Items,*Scene,GeometrySignature);
     if(NeedsSurfelPool())
     {
-        if(!S.Surfels)S.Surfels=MakeUnique<FRuntimeSurfelPool>();
+        uint32 Required=65536;
+        if(Room)
+        {
+            uint64 Seeds=0;for(const auto& I:Items)
+                if(const auto Asset=S.Assets.FindRef(I.Key);Asset && Asset->Surfels)Seeds+=Asset->Surfels->Num();
+            Required=FMath::RoundUpToPowerOfTwo(uint32(FMath::Clamp<uint64>(Seeds,256,65536)));
+        }
+        if(!S.Surfels || Required>S.SurfelCapacity)
+        { S.SurfelCapacity=Required;S.Surfels=MakeUnique<FRuntimeSurfelPool>(Required,FMath::Clamp(Required/4,256u,16384u)); }
         TArray<FRuntimeSurfelInstance> SurfelItems;S.SurfelError.Reset();TSet<FSurfelOwnerKey> Seen;
         for(const auto& I:Items)
         {
@@ -404,7 +485,7 @@ bool FRuntimeGI::Tick(UWorld* World)
     if(UseSurfelCache.GetValueOnGameThread()!=0 && !S.SurfelError.IsEmpty())
     {
         S.Error=S.SurfelError;S.GPU.Reset();S.SolvedCache.Reset();S.Job.Reset();S.Published.Reset();S.HoldingLighting=false;
-        SetVolumeStatus(World,S.Error,S.Published,0);return true;
+        SetVolumeStatus(World,S.Error,S.Published,0,Room);return true;
     }
     if(Current!=S.Requested || !S.Job)
     {
@@ -421,9 +502,9 @@ bool FRuntimeGI::Tick(UWorld* World)
         {
             auto* Asset=S.Assets.Find(I.Key);
             if(!Asset) { S.Error=TEXT("Unprepared or changed asset: ")+I.Key+TEXT(". Run PRTGI.Runtime.Prepare.");
-                S.Published.Reset();S.HoldingLighting=false;SetVolumeStatus(World,S.Error,S.Published,0);return HadOutput; }
+                S.Published.Reset();S.HoldingLighting=false;SetVolumeStatus(World,S.Error,S.Published,0,Room);return HadOutput; }
             if(I.Transform.GetScale3D().GetAbsMin()<1.e-6)continue;
-            if(Triangles.Num()+(*Asset)->Triangles.Num()>100000) { S.Error=TEXT("100000-triangle PC reference budget exceeded");S.Published.Reset();S.HoldingLighting=false;SetVolumeStatus(World,S.Error,S.Published,0);return HadOutput; }
+            if(Triangles.Num()+(*Asset)->Triangles.Num()>100000) { S.Error=TEXT("100000-triangle PC reference budget exceeded");S.Published.Reset();S.HoldingLighting=false;SetVolumeStatus(World,S.Error,S.Published,0,Room);return HadOutput; }
             FHash TransformHash;TransformHash.Transform(I.Transform);
             const FString ChartKey=I.Key+FString::Printf(TEXT(":%08x"),TransformHash.Value);
             auto Charts=S.WorldCharts.FindRef(ChartKey);
@@ -440,7 +521,7 @@ bool FRuntimeGI::Tick(UWorld* World)
                     const FSurfelOwnerKey Key{FObjectKey(I.Component),I.Element};
                     Tri.SurfelBinding=S.Surfels->TriangleBinding(S.SurfelOwners.FindChecked(Key),TriangleIndex);
                     if(Tri.SurfelBinding.Y==0 && FVector3f::CrossProduct(Tri.B-Tri.A,Tri.C-Tri.A).SizeSquared()>1.e-8)
-                    { S.Error=TEXT("Missing triangle-to-surfel binding; Prepare again");S.Published.Reset();S.HoldingLighting=false;SetVolumeStatus(World,S.Error,S.Published,0);return HadOutput; }
+                    { S.Error=TEXT("Missing triangle-to-surfel binding; Prepare again");S.Published.Reset();S.HoldingLighting=false;SetVolumeStatus(World,S.Error,S.Published,0,Room);return HadOutput; }
                 }
                 if(FVector3f::CrossProduct(Tri.B-Tri.A,Tri.C-Tri.A).SizeSquared()>1.e-8)Triangles.Add(Tri);
                 ++TriangleIndex;
@@ -459,14 +540,14 @@ bool FRuntimeGI::Tick(UWorld* World)
         S.Triangles=Triangles.Num();S.SnapshotMs=(FPlatformTime::Seconds()-Start)*1000;
         S.Job=Scene;S.GPU=MakeUnique<FRuntimeGPU>();S.GPU->Submit(Scene,Budget.GetValueOnGameThread());
         S.Started=Now;++S.Generations;
-        SetVolumeStatus(World,TEXT("Runtime reference: updating (no scene precompute)"),S.Published,0);
+        SetVolumeStatus(World,TEXT("Runtime reference: updating (no scene precompute)"),S.Published,0,Room);
         UE_LOG(LogPRTRuntime,Display,TEXT("Generation %d: %d instances, %d triangles, %d probes, CPU snapshot %.2f ms"),S.Generations,S.Instances,S.Triangles,Scene->Probes.Num(),S.SnapshotMs);
         return true;
     }
     if(Finished)
     {
         if(Output.Num()!=S.Job->Probes.Num()*9 || Output.ContainsByPredicate([](const auto& C){return C.ContainsNaN();}))
-        { S.Error=TEXT("GPU readback failed or returned non-finite SH");S.GPU.Reset();S.Published.Reset();S.HoldingLighting=false;SetVolumeStatus(World,S.Error,S.Published,0);return true; }
+        { S.Error=TEXT("GPU readback failed or returned non-finite SH");S.GPU.Reset();S.Published.Reset();S.HoldingLighting=false;SetVolumeStatus(World,S.Error,S.Published,0,Room);return true; }
         S.Published.Reset();S.HoldingLighting=false;
         int32 Offset=0;
         for(auto V:S.Job->Volumes)
@@ -479,7 +560,7 @@ bool FRuntimeGI::Tick(UWorld* World)
         S.Completed=Current;S.LastSeconds=Now-S.Started;
         if(S.Job->SurfelSnapshot) { S.GPU->RetainCacheAndReleaseScratch();S.SolvedCache=MoveTemp(S.GPU); }
         else S.GPU.Reset();
-        SetVolumeStatus(World,S.Job->SurfelSnapshot?TEXT("Runtime cache: ready (iterative surfel irradiance)"):TEXT("Runtime reference: ready (triangle BVH)"),S.Published,S.Job->SurfelSnapshot?0:S.Job->Bounces);
+        SetVolumeStatus(World,S.Job->SurfelSnapshot?TEXT("Runtime cache: ready (iterative surfel irradiance)"):TEXT("Runtime reference: ready (triangle BVH)"),S.Published,S.Job->SurfelSnapshot?0:S.Job->Bounces,Room);
         UE_LOG(LogPRTRuntime,Display,TEXT("Published generation %d in %.3f seconds (amortized convergence, not GPU frame time)"),S.Generations,S.LastSeconds);
         return true;
     }
@@ -488,15 +569,31 @@ bool FRuntimeGI::Tick(UWorld* World)
 FString FRuntimeGI::Status()const
 {
     const auto& S=*State;
+    if(S.RoomsActive)
+    {
+        FString Result=FString::Printf(TEXT("RuntimeRooms=1 Rooms=%d Assets=%d AssetBuilds=%d Published=%d"),S.Rooms.Num(),S.Assets.Num(),S.AssetBuilds,S.Published.Num());
+        for(const auto& Key:S.RoomOrder)
+        {
+            const auto& Worker=*S.Rooms.FindChecked(Key);
+            Result+=FString::Printf(TEXT("\nRoom=%s %s"),*GetPathNameSafe(Worker.RoomVolume.Get()),*Worker.Status());
+        }
+        return Result;
+    }
     return FString::Printf(TEXT("RuntimeReference=%d Assets=%d AssetBuilds=%d Instances=%d Triangles=%d Probes=%d Generation=%d Discarded=%d Pending=%d Published=%d ChartUpdates=%d SnapshotMs=%.3f ConvergenceSeconds=%.3f Error=%s %s SurfelError=%s LastAudit=[%s] SurfelCache=%d CacheIterations=%d CacheRays=%d CacheRelaxation=%.3f CacheRetained=%d HoldingLighting=%d CacheBatchesPerSubmit=%d %s"),
         IsEnabled(),S.Assets.Num(),S.AssetBuilds,S.Instances,S.Triangles,S.Job?S.Job->Probes.Num():0,S.Generations,S.Discarded,S.GPU?1:0,S.Published.Num(),S.ChartUpdates,S.SnapshotMs,S.LastSeconds,*S.Error,
         S.Surfels?*S.Surfels->Status():TEXT("SurfelPool=disabled"),*S.SurfelError,*S.LastSurfelAudit,UseSurfelCache.GetValueOnGameThread(),CacheIterations.GetValueOnGameThread(),CacheRays.GetValueOnGameThread(),CacheRelaxation.GetValueOnGameThread(),S.SolvedCache?1:0,S.HoldingLighting?1:0,CacheBatchesPerSubmit.GetValueOnGameThread(),S.GPU?*S.GPU->Progress():TEXT(""));
 }
 FString FRuntimeGI::AuditSurfels()
 {
+    if(State->RoomsActive)
+    {
+        FString Result;for(const auto& Key:State->RoomOrder)
+        { auto& Worker=*State->Rooms.FindChecked(Key);Result+=GetPathNameSafe(Worker.RoomVolume.Get())+TEXT(": ")+Worker.AuditSurfels()+TEXT("\n"); }
+        return Result;
+    }
     FString Error;
     if(!State->Surfels)return TEXT("Enable r.PRTGI.Runtime.SurfelPool 1 and runtime GI first");
-    return State->Surfels->RequestAudit(Error)?TEXT("GPU Surfel audit queued; result appears in Runtime.Status and Saved/PRTGIRuntime/surfel-audit.txt"):Error;
+    return State->Surfels->RequestAudit(Error)?TEXT("GPU Surfel audit queued; result appears in Runtime.Status and Saved/PRTGIRuntime/*surfel-audit.txt"):Error;
 }
 FString FRuntimeGI::Dump()const
 {
@@ -513,6 +610,16 @@ FString FRuntimeGI::Dump()const
         }
     }
     const FString Path=FPaths::ProjectSavedDir()/TEXT("PRTGIRuntime/probes.csv");IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path),true);
+    if(State->RoomsActive)
+    {
+        FString Mapping;int32 Index=0;
+        for(const auto& Key:State->RoomOrder)
+        {
+            const auto& Worker=*State->Rooms.FindChecked(Key);
+            if(Worker.RoomVolume.IsValid() && !Worker.GetVolumes().IsEmpty())Mapping+=FString::Printf(TEXT("%d\t%s\t%s\n"),Index++,*Worker.RoomVolume->VolumeId.ToString(),*Worker.RoomVolume->GetPathName());
+        }
+        FFileHelper::SaveStringToFile(Mapping,*(FPaths::GetPath(Path)/TEXT("rooms.tsv")));
+    }
     return FFileHelper::SaveStringToFile(CSV,*Path)?Path:TEXT("Failed to write probe dump");
 }
 }

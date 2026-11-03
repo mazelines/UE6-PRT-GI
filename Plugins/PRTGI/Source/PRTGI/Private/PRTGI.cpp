@@ -195,6 +195,7 @@ namespace
         SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>, ContactTriangles)
         SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>, ContactNodes)
         SHADER_PARAMETER(uint32, ContactNodeCount)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>, ContactVolumeRanges)
         SHADER_PARAMETER(uint32, ContactSamples)
         SHADER_PARAMETER(float, ContactRadius)
         SHADER_PARAMETER(float, ContactBias)
@@ -1047,7 +1048,7 @@ private:
             ActorVolumes->Reset(); ActorVolumeWorld.Reset();
             ENQUEUE_RENDER_COMMAND(PRTGIClearActorVolumes)([this](FRHICommandListImmediate&)
             { ActorRenderVolumes.Reset(); ActorRenderScene=nullptr; VisibilitySources_RenderThread.Reset(); VisibilityBuffer_RenderThread.SafeRelease(); DepthMomentsBuffer_RenderThread.SafeRelease();
-              ContactGeometry_RenderThread.Reset();ContactTriangles_RenderThread.SafeRelease();ContactNodes_RenderThread.SafeRelease(); });
+              ContactSources_RenderThread.Reset();ContactTriangles_RenderThread.SafeRelease();ContactNodes_RenderThread.SafeRelease(); });
         }
         if (ProbeVisualization && ProbeVisualization->GetWorld() == World) ClearProbeVisualization();
         if (SurfelBake && SurfelBakeWorld.Get()==World)
@@ -2302,6 +2303,7 @@ private:
         TArray<FVector4f> PackedCoefficients;
         TArray<FVector4f> PackedVolumes;
         TArray<FVector4f> VisibilityInfos;
+        TArray<TSharedPtr<const PRTGI::FMultiBounceData,ESPMode::ThreadSafe>> ContactSources;
         TArray<TSharedPtr<const FPRTGIProbeVisibility,ESPMode::ThreadSafe>> VisibilitySources;
         int32 VisibilityOffset=0;
         const FVector3f Translation(View.ViewMatrices.GetPreViewTranslation());
@@ -2317,6 +2319,7 @@ private:
             PackedVolumes.Add(FVector4f(ReceiverMax + Translation, float(Volume.BlendFace)));
             PackedCoefficients.Append(Volume.Coefficients);
             VisibilitySources.Add(Volume.Visibility);
+            ContactSources.Add(Volume.Geometry);
             VisibilityInfos.Add(FVector4f(float(VisibilityOffset),Volume.Visibility?float(Volume.Visibility->Resolution):0.f,Volume.Geometry && Volume.Geometry->CacheVersion>=6?1.f:0.f,Volume.bRuntimeGeometry?1.f:0.f));
             if(Volume.Visibility)VisibilityOffset+=Volume.Visibility->Planes.Num();
         };
@@ -2351,17 +2354,43 @@ private:
             }
         }
         FRDGBufferRef VolumeBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PRTGI.ProbeVolumes"), PackedVolumes);
-        TSharedPtr<const PRTGI::FMultiBounceData,ESPMode::ThreadSafe> ContactGeometry;
         const bool bRuntimeGeometry=bHasActors && ActorRenderVolumes.ContainsByPredicate([](const auto& V){return V.bRuntimeGeometry;});
-        if(bHasActors && (bRuntimeGeometry || CVarPRTContactSamples.GetValueOnRenderThread()>0 || CVarPRTProbeVisibility.GetValueOnRenderThread()==3))
-            for(const auto& Volume:ActorRenderVolumes)if(Volume.Geometry){ContactGeometry=Volume.Geometry;break;}
-        if(ContactGeometry!=ContactGeometry_RenderThread || !ContactTriangles_RenderThread)
+        // Static mode retains its historical shared scene BVH. Runtime room
+        // volumes carry independent BVHs; never borrow the first room's geometry.
+        if(!bRuntimeGeometry)
         {
-            const TArray<FVector4f> Empty{FVector4f(0)};
-            ContactTriangles_RenderThread=GraphBuilder.ConvertToExternalBuffer(CreateStructuredBuffer(GraphBuilder,TEXT("PRTGI.ContactTriangles"),ContactGeometry && !ContactGeometry->Triangles.IsEmpty()?ContactGeometry->Triangles:Empty));
-            ContactNodes_RenderThread=GraphBuilder.ConvertToExternalBuffer(CreateStructuredBuffer(GraphBuilder,TEXT("PRTGI.ContactNodes"),ContactGeometry && !ContactGeometry->Nodes.IsEmpty()?ContactGeometry->Nodes:Empty));
-            ContactGeometry_RenderThread=ContactGeometry;
+            TSharedPtr<const PRTGI::FMultiBounceData,ESPMode::ThreadSafe> Shared;
+            if(bHasActors && (CVarPRTContactSamples.GetValueOnRenderThread()>0 || CVarPRTProbeVisibility.GetValueOnRenderThread()==3))
+                for(const auto& Volume:ActorRenderVolumes)if(Volume.Geometry){Shared=Volume.Geometry;break;}
+            for(auto& Source:ContactSources)Source=Shared;
         }
+        if(ContactSources!=ContactSources_RenderThread || !ContactTriangles_RenderThread)
+        {
+            TArray<FVector4f> Triangles,Nodes;ContactRanges_RenderThread.Reset();
+            TMap<const PRTGI::FMultiBounceData*,FVector4f> Ranges;
+            for(const auto& Source:ContactSources)
+            {
+                FVector4f Range(0);
+                if(Source)
+                {
+                    if(const auto* Existing=Ranges.Find(Source.Get()))Range=*Existing;
+                    else
+                    {
+                        Range=FVector4f(float(Nodes.Num()/2),float(Source->Nodes.Num()/2),float(Triangles.Num()/3),0);
+                        Nodes.Append(Source->Nodes);Triangles.Append(Source->Triangles);Ranges.Add(Source.Get(),Range);
+                    }
+                }
+                ContactRanges_RenderThread.Add(Range);
+            }
+            ContactNodeCount_RenderThread=Nodes.Num()/2;
+            if(Triangles.IsEmpty())Triangles.Add(FVector4f(0));
+            if(Nodes.IsEmpty())Nodes.Add(FVector4f(0));
+            ContactTriangles_RenderThread=GraphBuilder.ConvertToExternalBuffer(CreateStructuredBuffer(GraphBuilder,TEXT("PRTGI.ContactTriangles"),Triangles));
+            ContactNodes_RenderThread=GraphBuilder.ConvertToExternalBuffer(CreateStructuredBuffer(GraphBuilder,TEXT("PRTGI.ContactNodes"),Nodes));
+            ContactSources_RenderThread=ContactSources;
+        }
+        if(ContactRanges_RenderThread.IsEmpty())ContactRanges_RenderThread.Add(FVector4f(0));
+        FRDGBufferRef ContactRanges=CreateStructuredBuffer(GraphBuilder,TEXT("PRTGI.ContactVolumeRanges"),ContactRanges_RenderThread);
         FRDGBufferRef VisibilityBuffer,DepthMomentsBuffer;
         if(VisibilitySources!=VisibilitySources_RenderThread || !VisibilityBuffer_RenderThread)
         {
@@ -2399,7 +2428,8 @@ private:
         Parameters->DebugMode=uint32(FMath::Clamp(CVarPRTDebug.GetValueOnRenderThread(),0,7));
         Parameters->ContactTriangles=GraphBuilder.CreateSRV(GraphBuilder.RegisterExternalBuffer(ContactTriangles_RenderThread));
         Parameters->ContactNodes=GraphBuilder.CreateSRV(GraphBuilder.RegisterExternalBuffer(ContactNodes_RenderThread));
-        Parameters->ContactNodeCount=ContactGeometry?ContactGeometry->Nodes.Num()/2:0;
+        Parameters->ContactNodeCount=ContactNodeCount_RenderThread;
+        Parameters->ContactVolumeRanges=GraphBuilder.CreateSRV(ContactRanges);
         Parameters->ContactSamples=FMath::Clamp(CVarPRTContactSamples.GetValueOnRenderThread(),0,16);
         Parameters->ContactRadius=FMath::Clamp(CVarPRTContactRadius.GetValueOnRenderThread(),0.f,200.f);
         Parameters->ContactBias=FMath::Clamp(CVarPRTContactBias.GetValueOnRenderThread(),.001f,1.f);
@@ -2820,7 +2850,9 @@ private:
     TArray<TSharedPtr<const FPRTGIProbeVisibility,ESPMode::ThreadSafe>> VisibilitySources_RenderThread;
     TRefCountPtr<FRDGPooledBuffer> VisibilityBuffer_RenderThread;
     TRefCountPtr<FRDGPooledBuffer> DepthMomentsBuffer_RenderThread;
-    TSharedPtr<const PRTGI::FMultiBounceData,ESPMode::ThreadSafe> ContactGeometry_RenderThread;
+    TArray<TSharedPtr<const PRTGI::FMultiBounceData,ESPMode::ThreadSafe>> ContactSources_RenderThread;
+    TArray<FVector4f> ContactRanges_RenderThread;
+    uint32 ContactNodeCount_RenderThread=0;
     TRefCountPtr<FRDGPooledBuffer> ContactTriangles_RenderThread,ContactNodes_RenderThread;
     const FScene* ActorRenderScene = nullptr;
     bool bActorRenderMode = false;

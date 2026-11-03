@@ -21,6 +21,8 @@ uint DebugMode;
 StructuredBuffer<float4> ContactTriangles;
 StructuredBuffer<float4> ContactNodes;
 uint ContactNodeCount;
+StructuredBuffer<float4> ContactVolumeRanges;
+uint SelectVolume(float3 Position);
 uint ContactSamples;
 float ContactRadius;
 float ContactBias;
@@ -50,18 +52,20 @@ bool ContactBoxHit(float3 O,float3 D,float3 Min,float3 Max,float Limit)
     return Hi>=Lo;
 }
 
-float ContactTrace(float3 O,float3 D,float MaxDistance,float MinDistance,bool AnyHit)
+float ContactTrace(float3 O,float3 D,float MaxDistance,float MinDistance,bool AnyHit,uint Volume)
 {
     float Limit=MaxDistance;
+    float4 Range=ContactVolumeRanges[Volume];
     uint Node=0;
-    [loop]while(Node<ContactNodeCount)
+    [loop]while(Node<(uint)Range.y)
     {
-        float4 Min=ContactNodes[Node*2],Max=ContactNodes[Node*2+1];
+        float4 Min=ContactNodes[(Node+(uint)Range.x)*2],Max=ContactNodes[(Node+(uint)Range.x)*2+1];
         if(!ContactBoxHit(O,D,Min.xyz,Max.xyz,Limit)){Node=Min.w<0?(uint)Max.w:Node+1;continue;}
         if(Min.w<0){++Node;continue;}
         [loop]for(uint T=(uint)Min.w;T<(uint)(Min.w+Max.w);++T)
         {
-            float3 A=ContactTriangles[T*3].xyz,E1=ContactTriangles[T*3+1].xyz,E2=ContactTriangles[T*3+2].xyz;
+            uint Triangle=T+(uint)Range.z;
+            float3 A=ContactTriangles[Triangle*3].xyz,E1=ContactTriangles[Triangle*3+1].xyz,E2=ContactTriangles[Triangle*3+2].xyz;
             float3 P=cross(D,E2);float Det=dot(E1,P);if(abs(Det)<1.e-8)continue;
             float3 Delta=O-A;float U=dot(Delta,P)/Det;if(U<0 || U>1)continue;
             float3 Q=cross(Delta,E1);float V=dot(D,Q)/Det;if(V<0 || U+V>1)continue;
@@ -77,14 +81,16 @@ float ContactTrace(float3 O,float3 D,float MaxDistance,float MinDistance,bool An
     return Limit;
 }
 
-float ContactDistance(float3 O,float3 D,float MaxDistance,float MinDistance)
+float ContactDistance(float3 O,float3 D,float MaxDistance,float MinDistance,uint Volume)
 {
-    return ContactTrace(O,D,MaxDistance,MinDistance,false);
+    return ContactTrace(O,D,MaxDistance,MinDistance,false,Volume);
 }
 
 float ContactVisibility(float3 Position,float3 Normal,uint2 Pixel)
 {
     if(ContactNodeCount==0 || ContactSamples==0 || ContactRadius<=0)return 1;
+    uint Volume=SelectVolume(Position);
+    if(Volume==0xffffffff)return 1;
     float3 T=normalize(cross(abs(Normal.z)<.99?float3(0,0,1):float3(0,1,0),Normal));
     float3 B=cross(Normal,T);
     // Screen-stable scrambling allows TAA to filter spatial noise without
@@ -95,7 +101,7 @@ float ContactVisibility(float3 Position,float3 Normal,uint2 Pixel)
     {
         float U=(I+.5)/ContactSamples,V=frac(I*.61803398875+Rotation);
         float3 D=(T*cos(2*PI*V)+B*sin(2*PI*V))*sqrt(U)+Normal*sqrt(1-U);
-        float Distance=ContactDistance(Position-ContactWorldTranslation+Normal*ContactBias,D,ContactRadius,ContactBias);
+        float Distance=ContactDistance(Position-ContactWorldTranslation+Normal*ContactBias,D,ContactRadius,ContactBias,Volume);
         Sum+=saturate(Distance/ContactRadius);
     }
     return Sum/ContactSamples;
@@ -200,7 +206,7 @@ float ProbeVisibility(uint Volume,int ProbeIndexInVolume,float3 ProbeToSurface)
     bool RuntimeGeometry=ProbeVisibilityVolumes[Volume].w>0;
     if(dot(ProbeToSurface,ProbeToSurface)<1.e-8)return 1;
     if(!RuntimeGeometry && (ProbeVisibilityEnabled==0 || R==0))return 1;
-    if((RuntimeGeometry || ProbeVisibilityEnabled==3) && ContactNodeCount>0)
+    if((RuntimeGeometry || ProbeVisibilityEnabled==3) && ContactVolumeRanges[Volume].y>0)
     {
         int3 Counts=int3(ProbeVolumes[Volume*5+2].xyz);
         int3 Coordinate=int3(ProbeIndexInVolume%Counts.x,(ProbeIndexInVolume/Counts.x)%Counts.y,ProbeIndexInVolume/(Counts.x*Counts.y));
@@ -210,7 +216,7 @@ float ProbeVisibility(uint Volume,int ProbeIndexInVolume,float3 ProbeToSurface)
         // Segment visibility needs any blocker, not the nearest distance.
         // Keep closest-hit contact attenuation and the static reference unchanged.
         return ContactTrace(Origin,ProbeToSurface/Distance,Limit,.001,
-            RuntimeGeometry && RuntimeVisibilityAnyHit!=0)<Limit?0:1;
+            RuntimeGeometry && RuntimeVisibilityAnyHit!=0,Volume)<Limit?0:1;
     }
     if(R==0)return 1;
     int Face;float2 UV;VisibilityCubeUV(ProbeToSurface,Face,UV);

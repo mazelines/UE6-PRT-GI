@@ -102,7 +102,8 @@ void FRuntimeGPU::RetainCacheAndReleaseScratch()
         S->Bindings.SafeRelease();S->Active.SafeRelease();S->Irradiance[1-S->Current].SafeRelease();
     });
 }
-bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
+bool FRuntimeGPU::HasPendingSubmission() const { return State->Pending; }
+bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
 {
     auto S=State;if(!S->Scene)return false;
     if(S->Pending)
@@ -152,6 +153,7 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
             if(S->Offset>=S->Scene->Probes.Num()) { Output=MoveTemp(S->Result);return true; }
         }
     }
+    if(!bAllowSubmission)return false;
     S->SubmittedSurfels=S->CachePhase?FMath::Min(S->Scene->CacheBatch*FMath::Clamp(S->Scene->CacheBatchesPerSubmit,1,32),
         S->Scene->SurfelSnapshot->ActiveSlots.Num()-S->CacheOffset):0;
     ++S->Submissions;S->Pending=true;S->Ready.Store(false);

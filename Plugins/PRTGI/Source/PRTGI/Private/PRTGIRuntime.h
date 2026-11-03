@@ -3,6 +3,7 @@
 #include "PRTGIVolumeData.h"
 
 class UWorld;
+class APRTProbeVolume;
 namespace PRTGI
 {
 // PC live transport with reference path tracing and an optional iterative
@@ -22,6 +23,10 @@ public:
     FString AuditSurfels();
     const TArray<FPRTGIRenderVolume>& GetVolumes() const;
 private:
+    bool TickInternal(UWorld* World, bool bAllowSubmission);
+    bool TickRooms(UWorld* World);
+    TWeakObjectPtr<APRTProbeVolume> RoomVolume;
+    bool bRoomWorker=false;
     struct FState;
     TUniquePtr<FState> State;
 };
@@ -53,7 +58,8 @@ public:
     void Submit(TSharedPtr<const FRuntimeScene, ESPMode::ThreadSafe> Scene, int32 Budget);
     // Schedules at most one bounded submission per tick. Publication is atomic for
     // the whole scene; a caller must reject obsolete layout/light generations.
-    bool Tick(TArray<FVector4f>& Output);
+    bool Tick(TArray<FVector4f>& Output, bool bAllowSubmission=true);
+    bool HasPendingSubmission() const;
     const TArray<FVector4f>& CacheResultForTest() const;
     FString Progress() const;
     // Call only after Tick has returned the completed probe output.

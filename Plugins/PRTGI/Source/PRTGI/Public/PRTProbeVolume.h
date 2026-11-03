@@ -28,6 +28,12 @@ public:
     TObjectPtr<UBoxComponent> VolumeBounds;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PRT|Volume")
     bool bEnabled = true;
+    // Explicit transport membership, independent of receiver bounds. Shared
+    // walls and external blockers may belong to more than one room.
+    UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="PRT|Runtime Room", meta=(ToolTip="Used when r.PRTGI.Runtime.Rooms=1. Include actors whose static mesh components participate in this room's transport. Empty membership does not fall back to the whole world."))
+    TArray<TObjectPtr<AActor>> RuntimeIncludedActors;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PRT|Runtime Room", meta=(ToolTip="Include actors or static mesh components with any of these tags, in addition to Included Actors. PRTGI.Ignore excludes a component. ISM/HISM membership covers the entire component."))
+    TArray<FName> RuntimeParticipantTags;
     /** 半尺寸（cm），也可通过 Actor Scale 调整范围。第一版不支持旋转。 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PRT|Volume", meta=(ToolTip="Half-size in cm. Actor Scale also affects the bounds. Rotation is not supported.", ClampMin="1", Units="cm"))
     FVector Extent = FVector(200.0);
