@@ -36,7 +36,7 @@ struct FRuntimeScene
     TArray<FPRTGIRenderVolume> Volumes;
     TSharedPtr<FRuntimeSurfelSnapshot,ESPMode::ThreadSafe> SurfelSnapshot;
     TArray<FVector4f> SurfelBindings; // sorted BVH triangle -> first slot, N, count, owner
-    int32 CacheIterations=5,CacheRays=64,CacheBatch=256;
+    int32 CacheIterations=5,CacheRays=64,CacheBatch=256,CacheBatchesPerSubmit=8;
     float CacheRelaxation=1.f;
     // Isolated analytic fixtures only; live scene input stays black.
     FVector3f AnalyticEnvironment=FVector3f::ZeroVector;
@@ -51,7 +51,7 @@ public:
     FRuntimeGPU();
     ~FRuntimeGPU();
     void Submit(TSharedPtr<const FRuntimeScene, ESPMode::ThreadSafe> Scene, int32 Budget);
-    // Schedules at most one bounded batch per tick. Publication is atomic for
+    // Schedules at most one bounded submission per tick. Publication is atomic for
     // the whole scene; a caller must reject obsolete layout/light generations.
     bool Tick(TArray<FVector4f>& Output);
     const TArray<FVector4f>& CacheResultForTest() const;

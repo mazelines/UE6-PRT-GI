@@ -100,8 +100,9 @@ public:
             for(int32 I=0;I<128;++I){Scene->Materials.Add(FVector4f(.5f,.5f,.5f,0));Scene->Materials.Add(FVector4f(0,0,1,0));}
             Scene->SurfelBindings={FVector4f(0,1,1,1),FVector4f(0,1,1,1)};
             Scene->SurfelSnapshot=Snapshot;Scene->ReadCacheForTest=true;
-            Iterations=Stage==0?1:(Stage<3?2:8);Alpha=Stage==3?.5f:1.f;
+            Iterations=Stage==0?1:((Stage<3 || Stage>=5)?2:8);Alpha=Stage==3?.5f:1.f;
             Scene->CacheIterations=Iterations;Scene->CacheRelaxation=Alpha;Scene->CacheBatch=Stage==2?256:1;
+            Scene->CacheBatchesPerSubmit=Stage==5?2:(Stage==6?8:1);
             Scene->CacheRays=64;Scene->Rays=1024;Scene->Probes={FVector4f(0,0,1,1)};
             Scene->AnalyticEnvironment=Stage==4?FVector3f(0):FVector3f(2,3,5);
             if(Stage!=4)Scene->Lights={FVector4f(0,0,1,0),FVector4f(2*UE_PI,2*UE_PI,2*UE_PI,0)};
@@ -127,8 +128,8 @@ public:
         }
         for(int32 I=3;I<Cache.Num();++I)Test->TestTrue(TEXT("Inactive slots stay zero"),Cache[I]==FVector4f(0,0,0,0));
         if(Stage==1)Previous=Cache;
-        if(Stage==2)Test->TestTrue(TEXT("Jacobi results independent of batch boundaries"),Cache==Previous);
-        GPU.Reset();++Stage;return Stage==5;
+        if(Stage==2 || Stage>=5)Test->TestTrue(TEXT("Jacobi results independent of batch/submission boundaries"),Cache==Previous);
+        GPU.Reset();++Stage;return Stage==7;
     }
 private:
     FAutomationTestBase* Test;

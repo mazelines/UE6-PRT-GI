@@ -1,0 +1,494 @@
+{
+  "date": "2026-11-04",
+  "branch": "feat/runtime-surfel-gi",
+  "base_commit": "26fc15b",
+  "build": {
+    "success": true,
+    "module_suffix": 6169,
+    "configuration": "UE6 Win64 Development Editor DX12/SM6"
+  },
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "cpu": "Intel Core i9-14900KF",
+    "map": "/PRTGI/Maps/PRTGI_Showcase",
+    "lighting_volume": "PRT_ClassicBox",
+    "instances": 53,
+    "triangles": 11400,
+    "surfels": 18312,
+    "probes": 512,
+    "probe_rays": 256,
+    "probe_batch": 32,
+    "cache_rays": 64,
+    "cache_batch": 256,
+    "cache_iterations": 5,
+    "cache_relaxation": 1,
+    "camera": {
+      "location": {
+        "x": -929.3068251871672,
+        "y": 94.08158306990055,
+        "z": 616.4994622794061
+      },
+      "rotation": {
+        "pitch": -15.600000351659425,
+        "yaw": 26.400000712698247,
+        "roll": -6.442676787015641e-07
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      }
+    }
+  },
+  "defaults": {
+    "r.PRTGI.Runtime.CacheBatchesPerSubmit": 8,
+    "r.PRTGI.Runtime.KeepLightingWhileUpdating": 1,
+    "r.PRTGI.Runtime.SurfelCache": 0
+  },
+  "publication_timing": {
+    "method": "Three interleaved rounds of 1/4/8 batches per submission, alternating 50000/100000 directional-light intensity. All modes use GPU fences. ConvergenceSeconds measures generation start to publication, excluding up to 0.25s scene-change detection delay. Not GPU or total-frame time.",
+    "results": {
+      "1": {
+        "samples_seconds": [
+          6.505,
+          6.491,
+          6.444
+        ],
+        "median_seconds": 6.491
+      },
+      "4": {
+        "samples_seconds": [
+          1.985,
+          1.868,
+          1.917
+        ],
+        "median_seconds": 1.917
+      },
+      "8": {
+        "samples_seconds": [
+          1.342,
+          1.272,
+          1.299
+        ],
+        "median_seconds": 1.299
+      }
+    },
+    "median_latency_reduction_fraction": 0.7998767524264366,
+    "raw": [
+      {
+        "name": "batch1_0",
+        "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=2 Discarded=0 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=11.174 ConvergenceSeconds=6.505 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=1 ",
+        "batch_count": 1,
+        "round": 0,
+        "intensity": 50000
+      },
+      {
+        "name": "batch4_0",
+        "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=4 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.067 ConvergenceSeconds=1.985 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=4 ",
+        "batch_count": 4,
+        "round": 0,
+        "intensity": 100000
+      },
+      {
+        "name": "batch8_0",
+        "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=5 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=8.881 ConvergenceSeconds=1.342 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 ",
+        "batch_count": 8,
+        "round": 0,
+        "intensity": 50000
+      },
+      {
+        "name": "batch1_1",
+        "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=6 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=8.772 ConvergenceSeconds=6.491 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=1 ",
+        "batch_count": 1,
+        "round": 1,
+        "intensity": 100000
+      },
+      {
+        "name": "batch4_1",
+        "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=7 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=8.972 ConvergenceSeconds=1.868 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=4 ",
+        "batch_count": 4,
+        "round": 1,
+        "intensity": 50000
+      },
+      {
+        "name": "batch8_1",
+        "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=8 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.101 ConvergenceSeconds=1.272 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 ",
+        "batch_count": 8,
+        "round": 1,
+        "intensity": 100000
+      },
+      {
+        "name": "batch1_2",
+        "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=9 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=8.914 ConvergenceSeconds=6.444 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=1 ",
+        "batch_count": 1,
+        "round": 2,
+        "intensity": 50000
+      },
+      {
+        "name": "batch4_2",
+        "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=10 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=10.135 ConvergenceSeconds=1.917 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=4 ",
+        "batch_count": 4,
+        "round": 2,
+        "intensity": 100000
+      },
+      {
+        "name": "batch8_2",
+        "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=11 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.040 ConvergenceSeconds=1.299 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 ",
+        "batch_count": 8,
+        "round": 2,
+        "intensity": 50000
+      }
+    ]
+  },
+  "gpu_timing": {
+    "method": "ProfileGPU captures during 32-sweep jobs to extend the measurement window. Same per-dispatch settings as latency test. Sum of PRT Surfel Irradiance Sweep passes in each captured frame only, excluding resolve/other rendering. Four captures with passes per mode; four without passes per mode. Different slots/sweeps, not a guaranteed worst-case GPU budget.",
+    "results": {
+      "1": {
+        "samples_ms": [
+          0.321,
+          0.327,
+          0.303,
+          0.355
+        ],
+        "median_ms": 0.324,
+        "min_ms": 0.303,
+        "max_ms": 0.355
+      },
+      "8": {
+        "samples_ms": [
+          2.177,
+          2.677,
+          2.634,
+          2.392
+        ],
+        "median_ms": 2.513,
+        "min_ms": 2.177,
+        "max_ms": 2.677
+      }
+    },
+    "raw": [
+      {
+        "batch_count": 1,
+        "capture": 0,
+        "lines": [
+          "[2026.11.03-15.12.11:834][ 32]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  4.9% \u250a \u258d        \u2502 0.321 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   4.9% \u250a \u258d        \u2502 0.321 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503"
+        ],
+        "pass_count": 1,
+        "sum_ms": 0.321
+      },
+      {
+        "batch_count": 1,
+        "capture": 1,
+        "lines": [],
+        "pass_count": 0,
+        "sum_ms": 0
+      },
+      {
+        "batch_count": 1,
+        "capture": 2,
+        "lines": [
+          "[2026.11.03-15.12.12:703][134]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  4.6% \u250a \u258e        \u2502 0.327 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   4.6% \u250a \u258e        \u2502 0.327 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503"
+        ],
+        "pass_count": 1,
+        "sum_ms": 0.327
+      },
+      {
+        "batch_count": 1,
+        "capture": 3,
+        "lines": [],
+        "pass_count": 0,
+        "sum_ms": 0
+      },
+      {
+        "batch_count": 1,
+        "capture": 4,
+        "lines": [],
+        "pass_count": 0,
+        "sum_ms": 0
+      },
+      {
+        "batch_count": 1,
+        "capture": 5,
+        "lines": [
+          "[2026.11.03-15.12.14:017][288]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  4.5% \u250a \u258e        \u2502 0.303 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   4.5% \u250a \u258e        \u2502 0.303 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503"
+        ],
+        "pass_count": 1,
+        "sum_ms": 0.303
+      },
+      {
+        "batch_count": 1,
+        "capture": 6,
+        "lines": [],
+        "pass_count": 0,
+        "sum_ms": 0
+      },
+      {
+        "batch_count": 1,
+        "capture": 7,
+        "lines": [
+          "[2026.11.03-15.12.14:921][394]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  5.1% \u250a \u258d        \u2502 0.355 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   5.1% \u250a \u258d        \u2502 0.355 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503"
+        ],
+        "pass_count": 1,
+        "sum_ms": 0.355
+      },
+      {
+        "batch_count": 8,
+        "capture": 0,
+        "lines": [],
+        "pass_count": 0,
+        "sum_ms": 0
+      },
+      {
+        "batch_count": 8,
+        "capture": 1,
+        "lines": [
+          "[2026.11.03-15.12.16:245][550]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.2% \u250a \u258e        \u2502 0.284 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.2% \u250a \u258e        \u2502 0.284 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:245][550]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.4% \u250a \u258e        \u2502 0.305 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.4% \u250a \u258e        \u2502 0.305 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:245][550]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.7% \u250a \u258e        \u2502 0.328 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.7% \u250a \u258e        \u2502 0.328 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:245][550]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.5% \u250a \u258e        \u2502 0.308 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.5% \u250a \u258e        \u2502 0.308 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:245][550]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.0% \u250a \u258f        \u2502 0.271 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.0% \u250a \u258f        \u2502 0.271 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:245][550]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  2.8% \u250a \u258f        \u2502 0.246 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   2.8% \u250a \u258f        \u2502 0.246 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:245][550]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  2.2% \u250a \u258f        \u2502 0.200 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   2.2% \u250a \u258f        \u2502 0.200 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:245][550]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  2.6% \u250a \u258f        \u2502 0.235 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   2.6% \u250a \u258f        \u2502 0.235 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503"
+        ],
+        "pass_count": 8,
+        "sum_ms": 2.177
+      },
+      {
+        "batch_count": 8,
+        "capture": 2,
+        "lines": [
+          "[2026.11.03-15.12.16:709][605]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.7% \u250a \u258e        \u2502 0.344 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.7% \u250a \u258e        \u2502 0.344 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:709][605]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.5% \u250a \u258e        \u2502 0.330 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.5% \u250a \u258e        \u2502 0.330 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:709][605]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.5% \u250a \u258e        \u2502 0.323 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.5% \u250a \u258e        \u2502 0.323 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:709][605]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.4% \u250a \u258e        \u2502 0.313 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.4% \u250a \u258e        \u2502 0.313 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:709][605]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.5% \u250a \u258e        \u2502 0.322 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.5% \u250a \u258e        \u2502 0.322 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:709][605]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.8% \u250a \u258e        \u2502 0.355 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.8% \u250a \u258e        \u2502 0.355 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:709][605]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.6% \u250a \u258e        \u2502 0.336 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.6% \u250a \u258e        \u2502 0.336 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.16:709][605]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.8% \u250a \u258e        \u2502 0.354 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.8% \u250a \u258e        \u2502 0.354 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503"
+        ],
+        "pass_count": 8,
+        "sum_ms": 2.677
+      },
+      {
+        "batch_count": 8,
+        "capture": 3,
+        "lines": [],
+        "pass_count": 0,
+        "sum_ms": 0
+      },
+      {
+        "batch_count": 8,
+        "capture": 4,
+        "lines": [],
+        "pass_count": 0,
+        "sum_ms": 0
+      },
+      {
+        "batch_count": 8,
+        "capture": 5,
+        "lines": [],
+        "pass_count": 0,
+        "sum_ms": 0
+      },
+      {
+        "batch_count": 8,
+        "capture": 6,
+        "lines": [
+          "[2026.11.03-15.12.18:609][830]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.8% \u250a \u258e        \u2502 0.352 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.8% \u250a \u258e        \u2502 0.352 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.18:609][830]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  4.3% \u250a \u258e        \u2502 0.395 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   4.3% \u250a \u258e        \u2502 0.395 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.18:609][830]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  4.3% \u250a \u258e        \u2502 0.390 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   4.3% \u250a \u258e        \u2502 0.390 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.18:609][830]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.5% \u250a \u258e        \u2502 0.319 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.5% \u250a \u258e        \u2502 0.319 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.18:609][830]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.5% \u250a \u258e        \u2502 0.319 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.5% \u250a \u258e        \u2502 0.319 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.18:609][830]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.7% \u250a \u258e        \u2502 0.336 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.7% \u250a \u258e        \u2502 0.336 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.18:609][830]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  2.8% \u250a \u258f        \u2502 0.260 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   2.8% \u250a \u258f        \u2502 0.260 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.18:609][830]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  2.9% \u250a \u258f        \u2502 0.263 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   2.9% \u250a \u258f        \u2502 0.263 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503"
+        ],
+        "pass_count": 8,
+        "sum_ms": 2.634
+      },
+      {
+        "batch_count": 8,
+        "capture": 7,
+        "lines": [
+          "[2026.11.03-15.12.19:084][887]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.4% \u250a \u258e        \u2502 0.300 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.4% \u250a \u258e        \u2502 0.300 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.19:084][887]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.1% \u250a \u258e        \u2502 0.280 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.1% \u250a \u258e        \u2502 0.280 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.19:084][887]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.5% \u250a \u258e        \u2502 0.309 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.5% \u250a \u258e        \u2502 0.309 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.19:084][887]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.3% \u250a \u258e        \u2502 0.295 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.3% \u250a \u258e        \u2502 0.295 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.19:084][887]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.2% \u250a \u258e        \u2502 0.287 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.2% \u250a \u258e        \u2502 0.287 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.19:084][887]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.1% \u250a \u258f        \u2502 0.277 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.1% \u250a \u258f        \u2502 0.277 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.19:084][887]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.7% \u250a \u258e        \u2502 0.328 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.7% \u250a \u258e        \u2502 0.328 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+          "[2026.11.03-15.12.19:084][887]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  3.6% \u250a \u258e        \u2502 0.316 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   3.6% \u250a \u258e        \u2502 0.316 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503"
+        ],
+        "pass_count": 8,
+        "sum_ms": 2.392
+      }
+    ]
+  },
+  "regression_byte_exact_against_previous_commit": {
+    "batch1_0": true,
+    "batch4_0": true,
+    "batch8_0": true,
+    "batch1_1": true,
+    "batch4_1": true,
+    "batch8_1": true,
+    "batch1_2": true,
+    "batch4_2": true,
+    "batch8_2": true,
+    "initial8": true,
+    "held_light": true,
+    "light_done": true,
+    "moved_done": true,
+    "disabled_done": true,
+    "restored": true,
+    "after_profiles": true,
+    "pie": true,
+    "reference": true
+  },
+  "live_scenarios": {
+    "initial8": {
+      "name": "initial8",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=1 Discarded=0 Pending=0 Published=1 ChartUpdates=53 SnapshotMs=39.909 ConvergenceSeconds=1.258 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 "
+    },
+    "held_light": {
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=12 Discarded=1 Pending=1 Published=1 ChartUpdates=0 SnapshotMs=9.377 ConvergenceSeconds=1.299 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=0 HoldingLighting=1 CacheBatchesPerSubmit=8 CacheSweep=1/5 CacheOffset=0 CachePhase=1 Submissions=10"
+    },
+    "light_done": {
+      "name": "light_done",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=12 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.377 ConvergenceSeconds=1.357 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 "
+    },
+    "cleared_geometry": {
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=13 Discarded=1 Pending=1 Published=0 ChartUpdates=1 SnapshotMs=9.609 ConvergenceSeconds=1.357 Error= SurfelRevision=2 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=1 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=0 HoldingLighting=0 CacheBatchesPerSubmit=8 CacheSweep=0/5 CacheOffset=0 CachePhase=1 Submissions=1"
+    },
+    "moved_done": {
+      "name": "moved_done",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=13 Discarded=1 Pending=0 Published=1 ChartUpdates=1 SnapshotMs=9.609 ConvergenceSeconds=1.054 Error= SurfelRevision=2 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=1 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 "
+    },
+    "hold_disabled": {
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=14 Discarded=1 Pending=1 Published=0 ChartUpdates=0 SnapshotMs=9.204 ConvergenceSeconds=1.054 Error= SurfelRevision=2 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=1 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=0 HoldingLighting=0 CacheBatchesPerSubmit=8 CacheSweep=0/5 CacheOffset=0 CachePhase=1 Submissions=1"
+    },
+    "disabled_done": {
+      "name": "disabled_done",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=14 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.204 ConvergenceSeconds=1.064 Error= SurfelRevision=2 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=1 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 "
+    },
+    "restored": {
+      "name": "restored",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=15 Discarded=1 Pending=0 Published=1 ChartUpdates=1 SnapshotMs=9.314 ConvergenceSeconds=1.053 Error= SurfelRevision=3 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=1 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 "
+    },
+    "after_profiles": {
+      "name": "after_profiles",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=18 Discarded=3 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.372 ConvergenceSeconds=1.287 Error= SurfelRevision=3 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=1 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 "
+    },
+    "pie": {
+      "name": "pie",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=1 Discarded=0 Pending=0 Published=1 ChartUpdates=53 SnapshotMs=40.246 ConvergenceSeconds=1.130 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 CacheBatchesPerSubmit=8 "
+    },
+    "reference": {
+      "name": "reference",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=2 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=8.773 ConvergenceSeconds=0.335 Error= SurfelPool=disabled SurfelError= LastAudit=[] SurfelCache=0 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=0 HoldingLighting=0 CacheBatchesPerSubmit=8 "
+    }
+  },
+  "automation": {
+    "command": "Automation RunTests PRTGI.",
+    "passed": 19,
+    "failed": 0,
+    "results": [
+      [
+        "Success",
+        "PRTGI.Capture.ConsoleScope"
+      ],
+      [
+        "Success",
+        "PRTGI.Integration.EditorPIECacheIdentity"
+      ],
+      [
+        "Success",
+        "PRTGI.Math.ConstantRadianceProducesPiIrradiance"
+      ],
+      [
+        "Success",
+        "PRTGI.Math.FibonacciProjectionRecoversSH3"
+      ],
+      [
+        "Success",
+        "PRTGI.MultiBounce.AdaptiveBudget"
+      ],
+      [
+        "Success",
+        "PRTGI.MultiBounce.AnalyticTwoPlanes"
+      ],
+      [
+        "Success",
+        "PRTGI.MultiBounce.MaterialChartIsolation"
+      ],
+      [
+        "Success",
+        "PRTGI.MultiBounce.SurfaceBindingAndThinOccluder"
+      ],
+      [
+        "Success",
+        "PRTGI.Runtime.AnalyticHemisphere"
+      ],
+      [
+        "Success",
+        "PRTGI.Runtime.SurfelCacheAnalytic"
+      ],
+      [
+        "Success",
+        "PRTGI.Runtime.SurfelInstanceIdentity"
+      ],
+      [
+        "Success",
+        "PRTGI.Runtime.SurfelPoolLifecycle"
+      ],
+      [
+        "Success",
+        "PRTGI.Settings.MapProfileIsolation"
+      ],
+      [
+        "Success",
+        "PRTGI.Surfel.CaptureAuditGrazing"
+      ],
+      [
+        "Success",
+        "PRTGI.Surfel.CubeAxialDepth"
+      ],
+      [
+        "Success",
+        "PRTGI.Surfel.PartialCaptureAudit"
+      ],
+      [
+        "Success",
+        "PRTGI.Surfel.RelightAndPersistence"
+      ],
+      [
+        "Success",
+        "PRTGI.Visibility.CapturedPlaneMapping"
+      ],
+      [
+        "Success",
+        "PRTGI.Visibility.NearClipSafety"
+      ]
+    ],
+    "extended_test": "PRTGI.Runtime.SurfelCacheAnalytic: independent analytic units and recurrence; compare single batch, large batch, grouped 2 with remainder, grouped 8 with sweep boundary."
+  },
+  "limitations": [
+    "No local invalidation or spatial interpolation quality change; roughly 10.5% SH difference from path reference remains.",
+    "Geometry edits still clear published GI until completion; full-cache recalculation remains.",
+    "Held SH delays response to new light; no warm start, blending or temporal filter.",
+    "Larger submissions increase GPU cost in update frames; fixed work cap is not a millisecond budget.",
+    "One submission in flight; final SH CPU readback remains.",
+    "PC editor only; mobile/cooked behavior not validated."
+  ],
+  "restoration": {
+    "runtime": 0,
+    "surfel_pool": 0,
+    "surfel_cache": 0,
+    "all_six_volumes_enabled": true,
+    "dirty_map_packages": 0,
+    "dirty_content_packages": 0,
+    "camera_restored": true,
+    "map_sha256_before_after": "b814f80c59d5b6a49275f0d93e17f4ddf9dae1296b1f849dda0eefa32785a845",
+    "preexisting_map_modification_excluded": true
+  }
+}

@@ -58,6 +58,8 @@ struct FRuntimeGPU::FState
     TRefCountPtr<FRDGPooledBuffer> Triangles,Nodes,Materials,Lights,Probes,SH;
     TRefCountPtr<FRDGPooledBuffer> Bindings,Active,Irradiance[2];
     TUniquePtr<FRHIGPUBufferReadback> Readback,CacheReadback;
+    FGPUFenceRHIRef Fence;
+    int32 SubmittedSurfels=0,Submissions=0;
     TArray<FVector4f> CacheResult;
     int32 CacheOffset=0,Iteration=0,Current=0;
     bool CachePhase=false;
@@ -72,7 +74,7 @@ FRuntimeGPU::~FRuntimeGPU()
     auto S=MoveTemp(State);
     ENQUEUE_RENDER_COMMAND(PRTReleaseRuntime)([S](FRHICommandListImmediate&)
     {
-        S->Readback.Reset();S->CacheReadback.Reset();S->Triangles.SafeRelease();S->Nodes.SafeRelease();
+        S->Fence.SafeRelease();S->Readback.Reset();S->CacheReadback.Reset();S->Triangles.SafeRelease();S->Nodes.SafeRelease();
         S->Bindings.SafeRelease();S->Active.SafeRelease();S->Irradiance[0].SafeRelease();S->Irradiance[1].SafeRelease();
         S->Materials.SafeRelease();S->Lights.SafeRelease();S->Probes.SafeRelease();S->SH.SafeRelease();
     });
@@ -86,7 +88,7 @@ const TArray<FVector4f>& FRuntimeGPU::CacheResultForTest()const { return State->
 FString FRuntimeGPU::Progress()const
 {
     const auto& S=*State;
-    return FString::Printf(TEXT("CacheSweep=%d/%d CacheOffset=%d CachePhase=%d"),S.Iteration,S.Scene?S.Scene->CacheIterations:0,S.CacheOffset,S.CachePhase);
+    return FString::Printf(TEXT("CacheSweep=%d/%d CacheOffset=%d CachePhase=%d Submissions=%d"),S.Iteration,S.Scene?S.Scene->CacheIterations:0,S.CacheOffset,S.CachePhase,S.Submissions);
 }
 void FRuntimeGPU::RetainCacheAndReleaseScratch()
 {
@@ -111,15 +113,15 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
             {
                 ENQUEUE_RENDER_COMMAND(PRTPollRuntime)([S](FRHICommandListImmediate&)
                 {
-                    if(S->Readback && S->Readback->IsReady() && (!S->CacheReadback || S->CacheReadback->IsReady()))
+                    if((S->Readback?S->Readback->IsReady():(S->Fence && S->Fence->Poll())) && (!S->CacheReadback || S->CacheReadback->IsReady()))
                     {
-                        const bool Last=!S->CachePhase && S->Offset+S->Budget>=S->Scene->Probes.Num();
-                        const uint32 Bytes=Last?S->Scene->Probes.Num()*9*16:16;
-                        if(const void* Ptr=S->Readback->Lock(Bytes))
+                        if(S->Readback)
                         {
-                            if(Last) { S->Result.SetNumUninitialized(S->Scene->Probes.Num()*9);FMemory::Memcpy(S->Result.GetData(),Ptr,Bytes); }
-                            S->Readback->Unlock();
+                            const uint32 Bytes=S->Scene->Probes.Num()*9*16;
+                            if(const void* Ptr=S->Readback->Lock(Bytes))
+                            { S->Result.SetNumUninitialized(S->Scene->Probes.Num()*9);FMemory::Memcpy(S->Result.GetData(),Ptr,Bytes);S->Readback->Unlock(); }
                         }
+                        S->Fence.SafeRelease();
                         if(S->CacheReadback)
                         {
                             const uint32 Size=S->Scene->SurfelSnapshot->Capacity*16;
@@ -137,7 +139,7 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
         S->Pending=false;
         if(S->CachePhase)
         {
-            S->CacheOffset+=S->Scene->CacheBatch;
+            S->CacheOffset+=S->SubmittedSurfels;
             if(S->CacheOffset>=S->Scene->SurfelSnapshot->ActiveSlots.Num())
             {
                 S->CacheOffset=0;S->Current=1-S->Current;++S->Iteration;
@@ -150,7 +152,9 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
             if(S->Offset>=S->Scene->Probes.Num()) { Output=MoveTemp(S->Result);return true; }
         }
     }
-    S->Pending=true;S->Ready.Store(false);
+    S->SubmittedSurfels=S->CachePhase?FMath::Min(S->Scene->CacheBatch*FMath::Clamp(S->Scene->CacheBatchesPerSubmit,1,32),
+        S->Scene->SurfelSnapshot->ActiveSlots.Num()-S->CacheOffset):0;
+    ++S->Submissions;S->Pending=true;S->Ready.Store(false);
     ENQUEUE_RENDER_COMMAND(PRTEvaluateRuntime)([S](FRHICommandListImmediate& RHICmdList)
     {
         FRDGBuilder Graph(RHICmdList);const auto& Scene=*S->Scene;
@@ -202,8 +206,15 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
         if(S->CachePhase)
         {
             TShaderMapRef<FPRTCacheCS> Shader(GetGlobalShaderMap(GMaxRHIShaderPlatform));
-            FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Surfel Irradiance Sweep"),Shader,P,
-                FIntVector(FMath::Min(Scene.CacheBatch,int32(P->CacheActiveCount)-S->CacheOffset),1,1));
+            // Do not cross a Jacobi sweep boundary in a submission. Every
+            // dispatch reads the same previous buffer and writes disjoint slots.
+            for(int32 Done=0;Done<S->SubmittedSurfels;Done+=Scene.CacheBatch)
+            {
+                auto* Batch=Graph.AllocParameters<FPRTCacheCS::FParameters>();*Batch=*P;
+                Batch->CacheOffset=S->CacheOffset+Done;
+                FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Surfel Irradiance Sweep"),Shader,Batch,
+                    FIntVector(FMath::Min(Scene.CacheBatch,S->SubmittedSurfels-Done),1,1));
+            }
         }
         else
         {
@@ -211,16 +222,22 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
         FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Runtime Probe Transport Cache=%d",P->CacheEnabled),Shader,P,
             FIntVector(FMath::Min(S->Budget,Scene.Probes.Num()-S->Offset),1,1));
         }
-        S->Readback=MakeUnique<FRHIGPUBufferReadback>(TEXT("PRT.Runtime.Readback"));
-        // A tiny readback also bounds queued GPU work to one batch. Only the
-        // last batch reads all coefficients (reference validation / CPU resolve).
-        AddEnqueueCopyPass(Graph,S->Readback.Get(),S->CachePhase?Next:SH,Last?Scene.Probes.Num()*9*16:16);
+        if(Last)
+        {
+            S->Readback=MakeUnique<FRHIGPUBufferReadback>(TEXT("PRT.Runtime.Readback"));
+            AddEnqueueCopyPass(Graph,S->Readback.Get(),SH,Scene.Probes.Num()*9*16);
+        }
         if(Last && Scene.SurfelSnapshot && Scene.ReadCacheForTest)
         {
             S->CacheReadback=MakeUnique<FRHIGPUBufferReadback>(TEXT("PRT.Cache.TestReadback"));
             AddEnqueueCopyPass(Graph,S->CacheReadback.Get(),Previous,Scene.SurfelSnapshot->Capacity*16);
         }
         Graph.Execute();
+        if(!Last)
+        {
+            S->Fence=RHICreateGPUFence(TEXT("PRT.Runtime.SubmissionComplete"));
+            RHICmdList.WriteGPUFence(S->Fence);
+        }
     });
     return false;
 }
