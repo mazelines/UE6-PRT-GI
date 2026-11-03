@@ -183,8 +183,10 @@ float3 VisibilityCubeDirection(int Face,float2 UV)
 float ProbeVisibility(uint Volume,int ProbeIndexInVolume,float3 ProbeToSurface)
 {
     int R=int(ProbeVisibilityVolumes[Volume].y);
-    if(ProbeVisibilityEnabled==0 || R==0 || dot(ProbeToSurface,ProbeToSurface)<1.e-8)return 1;
-    if(ProbeVisibilityEnabled==3 && ContactNodeCount>0)
+    bool RuntimeGeometry=ProbeVisibilityVolumes[Volume].w>0;
+    if(dot(ProbeToSurface,ProbeToSurface)<1.e-8)return 1;
+    if(!RuntimeGeometry && (ProbeVisibilityEnabled==0 || R==0))return 1;
+    if((RuntimeGeometry || ProbeVisibilityEnabled==3) && ContactNodeCount>0)
     {
         int3 Counts=int3(ProbeVolumes[Volume*5+2].xyz);
         int3 Coordinate=int3(ProbeIndexInVolume%Counts.x,(ProbeIndexInVolume/Counts.x)%Counts.y,ProbeIndexInVolume/(Counts.x*Counts.y));
@@ -193,6 +195,7 @@ float ProbeVisibility(uint Volume,int ProbeIndexInVolume,float3 ProbeToSurface)
         float Distance=length(ProbeToSurface),Limit=max(0,Distance-VisibilityBiasCm);
         return ContactDistance(Origin,ProbeToSurface/Distance,Limit,.001)<Limit?0:1;
     }
+    if(R==0)return 1;
     int Face;float2 UV;VisibilityCubeUV(ProbeToSurface,Face,UV);
     float2 Pixel=UV*R-.5,T=frac(Pixel);int2 Base=int2(floor(Pixel));
     int Offset=int(ProbeVisibilityVolumes[Volume].x)+ProbeIndexInVolume*6*R*R;

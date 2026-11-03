@@ -4,7 +4,7 @@
 
 [使用指南 · GitHub Wiki](https://github.com/mazelines/UE5-PRT-GI/wiki)
 
-`ue6` 分支提供面向 **Unreal Engine 6.0** 静态场景的 Probe GI 插件与宿主项目。包含 Cornell Box 示例、方向光实时重光照、1～12 次间接反弹、独立 Probe Volume 与可视化。
+`feat/runtime-surfel-gi` 分支面向 **Unreal Engine 6.0**，采用**先验证 PC，再扩展移动端**的路线。在保留静态 PRT 的同时，增加可选的 GPU 运行时光传输参考实现，用于家具布局变化。目前使用三角形 BVH，还没有实现 Surfel Radiance Cascade。参见[运行说明与限制（韩语）](docs/runtime-gi-pc.md)。下文的设置和缓存说明适用于原有静态 PRT 路径。
 
 ![PRT GI Cornell Box showcase](Plugins/PRTGI/docs/images/prt-gi-showcase-ue6-cfcd80c5.png)
 

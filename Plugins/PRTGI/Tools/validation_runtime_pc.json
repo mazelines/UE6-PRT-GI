@@ -1,0 +1,515 @@
+{
+  "date": "2026-11-03",
+  "branch": "feat/runtime-surfel-gi",
+  "implementation": "Opt-in PC triangle-BVH runtime transport reference; not Surfel Radiance Cascades",
+  "environment": {
+    "engine": "UE 6.0 source build",
+    "build": "Win64 Development Editor, PRTGI module 6162",
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "cpu": "Intel Core i9-14900KF",
+    "rhi": "DX12 SM6",
+    "map": "/PRTGI/Maps/PRTGI_Showcase",
+    "enabled_volume": "PRT_ClassicBox",
+    "probes": 512,
+    "rays_per_probe": 256,
+    "max_bounces": 6,
+    "probes_per_batch": 32,
+    "scene_instances": 53,
+    "scene_triangles": 11400,
+    "asset_material_variants": 32
+  },
+  "build_success": true,
+  "automation": [
+    {
+      "name": "PRTGI.Capture.ConsoleScope",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Integration.EditorPIECacheIdentity",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Math.ConstantRadianceProducesPiIrradiance",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Math.FibonacciProjectionRecoversSH3",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.MultiBounce.AdaptiveBudget",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.MultiBounce.AnalyticTwoPlanes",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.MultiBounce.MaterialChartIsolation",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.MultiBounce.SurfaceBindingAndThinOccluder",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Runtime.AnalyticHemisphere",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Settings.MapProfileIsolation",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Surfel.CaptureAuditGrazing",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Surfel.CubeAxialDepth",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Surfel.PartialCaptureAudit",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Surfel.RelightAndPersistence",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Visibility.CapturedPlaneMapping",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Visibility.NearClipSafety",
+      "result": "Success"
+    }
+  ],
+  "functional_statuses": {
+    "added": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 54,
+      "Triangles": 11412,
+      "Probes": 512,
+      "Generation": 2,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "SnapshotMs": 60.258,
+      "ConvergenceSeconds": 0.512,
+      "Error": ""
+    },
+    "dark": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 6,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "SnapshotMs": 56.328,
+      "ConvergenceSeconds": 0.455,
+      "Error": ""
+    },
+    "half": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 5,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "SnapshotMs": 58.546,
+      "ConvergenceSeconds": 0.51,
+      "Error": ""
+    },
+    "moved": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 54,
+      "Triangles": 11412,
+      "Probes": 512,
+      "Generation": 3,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "SnapshotMs": 56.252,
+      "ConvergenceSeconds": 0.488,
+      "Error": ""
+    },
+    "optimized_added": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 54,
+      "Triangles": 11412,
+      "Probes": 512,
+      "Generation": 2,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "ChartUpdates": 1,
+      "SnapshotMs": 8.887,
+      "ConvergenceSeconds": 0.442,
+      "Error": ""
+    },
+    "optimized_baseline": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 1,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "ChartUpdates": 53,
+      "SnapshotMs": 36.458,
+      "ConvergenceSeconds": 0.53,
+      "Error": ""
+    },
+    "optimized_moved": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 54,
+      "Triangles": 11412,
+      "Probes": 512,
+      "Generation": 3,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "ChartUpdates": 1,
+      "SnapshotMs": 8.469,
+      "ConvergenceSeconds": 0.443,
+      "Error": ""
+    },
+    "optimized_removed": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 4,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "ChartUpdates": 0,
+      "SnapshotMs": 8.266,
+      "ConvergenceSeconds": 0.456,
+      "Error": ""
+    },
+    "pie": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 1,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "ChartUpdates": 53,
+      "SnapshotMs": 35.659,
+      "ConvergenceSeconds": 0.486,
+      "Error": ""
+    },
+    "pie_moved": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 2,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "ChartUpdates": 1,
+      "SnapshotMs": 10.968,
+      "ConvergenceSeconds": 0.455,
+      "Error": ""
+    },
+    "point": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 7,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "SnapshotMs": 56.338,
+      "ConvergenceSeconds": 0.482,
+      "Error": ""
+    },
+    "point_removed": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 8,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "SnapshotMs": 56.775,
+      "ConvergenceSeconds": 0.453,
+      "Error": ""
+    },
+    "rapid_final": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 5,
+      "Discarded": 2,
+      "Pending": 0,
+      "Published": 1,
+      "ChartUpdates": 0,
+      "SnapshotMs": 8.373,
+      "ConvergenceSeconds": 0.424,
+      "Error": ""
+    },
+    "removed": {
+      "RuntimeReference": 1,
+      "Assets": 32,
+      "AssetBuilds": 32,
+      "Instances": 53,
+      "Triangles": 11400,
+      "Probes": 512,
+      "Generation": 4,
+      "Discarded": 0,
+      "Pending": 0,
+      "Published": 1,
+      "SnapshotMs": 60.32,
+      "ConvergenceSeconds": 0.51,
+      "Error": ""
+    }
+  },
+  "sh_comparisons": [
+    {
+      "reference": "baseline",
+      "candidate": "added",
+      "common_valid": 467,
+      "valid_reference": 475,
+      "valid_candidate": 467,
+      "relative_l2": 0.14038761263048374,
+      "max_abs": 26798.178700000004,
+      "candidate_energy": 1425888295038.8784,
+      "reference_energy": 1497475062220.2014
+    },
+    {
+      "reference": "added",
+      "candidate": "moved",
+      "common_valid": 459,
+      "valid_reference": 467,
+      "valid_candidate": 467,
+      "relative_l2": 0.14746324202095537,
+      "max_abs": 26798.178700000004,
+      "candidate_energy": 1499068527190.3184,
+      "reference_energy": 1424458860284.8755
+    },
+    {
+      "reference": "baseline",
+      "candidate": "removed",
+      "common_valid": 475,
+      "valid_reference": 475,
+      "valid_candidate": 475,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "candidate_energy": 1516803559665.7717,
+      "reference_energy": 1516803559665.7717
+    },
+    {
+      "reference": "baseline",
+      "candidate": "half",
+      "common_valid": 475,
+      "valid_reference": 475,
+      "valid_candidate": 475,
+      "relative_l2": 0.49999999996118716,
+      "max_abs": 34043.7422,
+      "candidate_energy": 379200889975.31445,
+      "reference_energy": 1516803559665.7717
+    },
+    {
+      "reference": "dark",
+      "candidate": "point",
+      "common_valid": 475,
+      "valid_reference": 475,
+      "valid_candidate": 475,
+      "relative_l2": null,
+      "max_abs": 2080.7561,
+      "candidate_energy": 603703892.5885408,
+      "reference_energy": 0.0
+    },
+    {
+      "reference": "dark",
+      "candidate": "point_removed",
+      "common_valid": 475,
+      "valid_reference": 475,
+      "valid_candidate": 475,
+      "relative_l2": null,
+      "max_abs": 0.0,
+      "candidate_energy": 0.0,
+      "reference_energy": 0.0
+    },
+    {
+      "reference": "baseline",
+      "candidate": "optimized_baseline",
+      "common_valid": 475,
+      "valid_reference": 475,
+      "valid_candidate": 475,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "candidate_energy": 1516803559665.7717,
+      "reference_energy": 1516803559665.7717
+    },
+    {
+      "reference": "added",
+      "candidate": "optimized_added",
+      "common_valid": 467,
+      "valid_reference": 467,
+      "valid_candidate": 467,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "candidate_energy": 1425888295038.8784,
+      "reference_energy": 1425888295038.8784
+    },
+    {
+      "reference": "moved",
+      "candidate": "optimized_moved",
+      "common_valid": 467,
+      "valid_reference": 467,
+      "valid_candidate": 467,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "candidate_energy": 1518390449086.7397,
+      "reference_energy": 1518390449086.7397
+    },
+    {
+      "reference": "baseline",
+      "candidate": "optimized_removed",
+      "common_valid": 475,
+      "valid_reference": 475,
+      "valid_candidate": 475,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "candidate_energy": 1516803559665.7717,
+      "reference_energy": 1516803559665.7717
+    },
+    {
+      "reference": "baseline",
+      "candidate": "pie",
+      "common_valid": 475,
+      "valid_reference": 475,
+      "valid_candidate": 475,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "candidate_energy": 1516803559665.7717,
+      "reference_energy": 1516803559665.7717
+    },
+    {
+      "reference": "pie",
+      "candidate": "pie_moved",
+      "common_valid": 469,
+      "valid_reference": 475,
+      "valid_candidate": 475,
+      "relative_l2": 0.07303107776789117,
+      "max_abs": 19992.3125,
+      "candidate_energy": 1522073447753.559,
+      "reference_energy": 1514954953391.982
+    },
+    {
+      "reference": "pie_moved",
+      "candidate": "rapid_final",
+      "common_valid": 475,
+      "valid_reference": 475,
+      "valid_candidate": 475,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "candidate_energy": 1540875519238.6885,
+      "reference_energy": 1540875519238.6885
+    }
+  ],
+  "half_light_linearity": {
+    "max_abs_error_from_exact_half": 5.0000002374872565e-05
+  },
+  "fixture": {
+    "source_mesh": "/PRTGI/Showcase/Meshes/SM_Cube",
+    "source_material": "/PRTGI/Showcase/Materials/MI_White",
+    "added_cube_location_cm": [
+      240,
+      -30,
+      220
+    ],
+    "moved_cube_location_cm": [
+      380,
+      120,
+      220
+    ],
+    "cube_scale": [
+      0.8,
+      0.8,
+      0.8
+    ],
+    "point_light_location_cm": [
+      285,
+      25,
+      410
+    ],
+    "point_light_candela": 1000,
+    "point_light_attenuation_radius_cm": 600,
+    "sun_lux": [
+      100000,
+      50000,
+      0
+    ],
+    "pie_actor": "Classic_Box_Small_Cube",
+    "pie_translation_cm": [
+      40,
+      0,
+      0
+    ],
+    "rapid_change": "In PIE use batch=1, sun=50000, wait 0.4s, sun=60000, wait 0.4s, batch=32, sun=100000. Two obsolete generations discarded."
+  },
+  "gpu_profile": {
+    "samples": 1,
+    "editor_viewport_pixels": [
+      3309,
+      1508
+    ],
+    "runtime_resolve_ms": 14.538,
+    "frame_gpu_ms": 18.189,
+    "transport_batch_ms": null,
+    "note": "Single ProfileGPU frame around cube removal, before new generation publication. Resolve includes per-pixel BVH visibility/contact work. Not a performance average or production target."
+  },
+  "map_sha256_before": "aaadb68a88cea4ccfa4054559aa0b0adc3aa3decb2b0088ae61b78dc6c999127",
+  "map_sha256_after": "aaadb68a88cea4ccfa4054559aa0b0adc3aa3decb2b0088ae61b78dc6c999127",
+  "map_file_preserved": true,
+  "limitations": [
+    "Editor/PIE only; asset cache is session memory, no cooked serialization",
+    "Frame-amortized whole-volume publication; GI is cleared while updating",
+    "CPU timing values are single observations, not repeated statistical benchmarks",
+    "No validated mobile build or mobile performance",
+    "No disk-surfel tracing, automatic clipmaps, radiance-cascade merging or temporal denoising",
+    "Editor startup contains unrelated engine and EditorToolset test-discovery errors; only the 16 PRTGI tests are reported as passing"
+  ]
+}

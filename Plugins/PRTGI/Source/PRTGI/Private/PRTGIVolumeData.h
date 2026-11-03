@@ -33,6 +33,8 @@ struct FPRTGIRenderVolume
     float BlendDistance = 0.0f;
     int32 Priority = 0;
     bool bTrilinear = false;
+    // Runtime geometry must use current ray visibility instead of baked planes.
+    bool bRuntimeGeometry = false;
     TSharedPtr<const FPRTGIProbeVisibility, ESPMode::ThreadSafe> Visibility;
     TSharedPtr<const PRTGI::FMultiBounceData, ESPMode::ThreadSafe> Geometry;
     TSharedPtr<const FPRTGIGPUCoefficients, ESPMode::ThreadSafe> GPUCoefficients;

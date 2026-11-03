@@ -1,0 +1,133 @@
+#include "/Engine/Public/Platform.ush"
+StructuredBuffer<float4> Triangles;
+StructuredBuffer<float4> Nodes;
+StructuredBuffer<float4> Materials;
+StructuredBuffer<float4> Lights;
+StructuredBuffer<float4> Probes;
+RWStructuredBuffer<float4> OutSH;
+uint NodeCount;
+uint LightCount;
+uint ProbeOffset;
+uint ProbeCount;
+uint RayCount;
+uint BounceCount;
+
+bool BoxHit(float3 O, float3 D, float3 Min, float3 Max, float Limit)
+{
+    float Lo=0,Hi=Limit;
+    [unroll] for(uint Axis=0;Axis<3;++Axis)
+    {
+        if(abs(D[Axis])<1.e-8) { if(O[Axis]<Min[Axis] || O[Axis]>Max[Axis]) return false; }
+        else { float A=(Min[Axis]-O[Axis])/D[Axis],B=(Max[Axis]-O[Axis])/D[Axis]; Lo=max(Lo,min(A,B));Hi=min(Hi,max(A,B)); }
+    }
+    return Hi>=Lo;
+}
+int Trace(float3 O,float3 D,inout float Distance,out float2 Bary,bool Shadow)
+{
+    int Hit=-1; Bary=0;
+    uint Node=0;
+    [loop] while(Node<NodeCount)
+    {
+        float4 Min=Nodes[Node*2],Max=Nodes[Node*2+1];
+        if(!BoxHit(O,D,Min.xyz,Max.xyz,Distance)) { Node=Min.w<0?(uint)Max.w:Node+1;continue; }
+        if(Min.w<0) { ++Node;continue; }
+        [loop] for(uint T=(uint)Min.w;T<(uint)(Min.w+Max.w);++T)
+        {
+            float4 A=Triangles[T*3]; if(Shadow && A.w==0)continue;
+            float3 E1=Triangles[T*3+1].xyz,E2=Triangles[T*3+2].xyz,P=cross(D,E2);
+            float Det=dot(E1,P);if(abs(Det)<1.e-8)continue;
+            float Inv=rcp(Det);float3 Delta=O-A.xyz;
+            float U=dot(Delta,P)*Inv;if(U<0||U>1)continue;
+            float3 Q=cross(Delta,E1);float V=dot(D,Q)*Inv;if(V<0||U+V>1)continue;
+            float TDist=dot(E2,Q)*Inv;
+            if(TDist>.002 && TDist<Distance) { Distance=TDist;Bary=float2(U,V);Hit=T;if(Shadow)return Hit; }
+        }
+        ++Node;
+    }
+    return Hit;
+}
+uint Hash(uint X) { X^=X>>16;X*=0x7feb352d;X^=X>>15;X*=0x846ca68b;return X^(X>>16); }
+float Rand(inout uint Seed) { Seed=Hash(Seed);return (Seed>>8)*(1.0/16777216.0); }
+float3 CosineDirection(float3 N,inout uint Seed)
+{
+    float U=Rand(Seed),A=6.28318530718*Rand(Seed);
+    float3 T=normalize(cross(abs(N.z)<.99?float3(0,0,1):float3(0,1,0),N)),B=cross(N,T);
+    return sqrt(U)*(cos(A)*T+sin(A)*B)+sqrt(1-U)*N;
+}
+float3 Path(float3 O,float3 D,inout uint Seed,out float Backface)
+{
+    float3 Sum=0,Throughput=1;Backface=0;
+    [loop] for(uint Bounce=0;Bounce<BounceCount;++Bounce)
+    {
+        float Distance=6400;float2 Bary;int Hit=Trace(O,D,Distance,Bary,false);if(Hit<0)break;
+        uint Sample=(uint)min(7,floor(Bary.y*8))*8+(uint)min(7,floor(Bary.x*8));
+        float3 Rho=Materials[Hit*128+Sample*2].xyz;
+        float3 N=Materials[Hit*128+Sample*2+1].xyz;
+        float3 Ng=normalize(cross(Triangles[Hit*3+1].xyz,Triangles[Hit*3+2].xyz));
+        // Winding may reverse under mirrored instance transforms. Authored
+        // shading normals determine the outward side of opaque surfaces.
+        if(dot(Ng,N)<0)Ng=-Ng;
+        if(dot(Ng,D)>=0) { if(Bounce==0)Backface=1;break; }
+        float3 P=O+D*Distance;float Bias=max(.02,4*1.1920929e-7*max(max(abs(P.x),abs(P.y)),abs(P.z)));
+        P+=Ng*Bias;
+        float3 Direct=0;
+        [loop] for(uint L=0;L<LightCount;++L)
+        {
+            float4 Pos=Lights[L*2],Color=Lights[L*2+1];float3 ToLight=Pos.xyz;float Limit=1.e7,Attenuation=1;
+            if(Pos.w>0)
+            {
+                ToLight=Pos.xyz-P;float D2=dot(ToLight,ToLight);Limit=sqrt(D2);
+                ToLight/=max(Limit,.001);
+                float Fade=saturate(1-pow(Limit/max(Color.w,.001),4));
+                // World units are cm. Color is point-light luminous intensity
+                // in candela, including indirect intensity and temperature.
+                Attenuation=Fade*Fade/max(D2*.0001,.0001);
+            }
+            float Cos=dot(Ng,ToLight)>0?max(0,dot(N,ToLight)):0;
+            if(Cos>0 && Attenuation>0)
+            {
+                float2 Unused;float ShadowDistance=max(0,Limit-Bias);
+                if(Trace(P,ToLight,ShadowDistance,Unused,true)<0) Direct+=Color.rgb*(Cos*Attenuation);
+            }
+        }
+        Sum+=Throughput*Rho*(Direct/3.14159265359);
+        Throughput*=Rho;
+        if(Bounce>=3 && max(Throughput.r,max(Throughput.g,Throughput.b))<.01)break;
+        D=CosineDirection(N,Seed);if(dot(D,Ng)<=0)break;O=P;
+    }
+    return Sum;
+}
+groupshared float3 Reduction[64*9];
+groupshared float Backfaces[64];
+[numthreads(64,1,1)]
+void RuntimeCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
+{
+    uint Probe=ProbeOffset+Group.x;if(Probe>=ProbeCount)return;
+    float3 Sum[9];[unroll]for(uint C=0;C<9;++C)Sum[C]=0;
+    float Rejected=0;
+    [loop]for(uint Ray=Lane;Ray<RayCount;Ray+=64)
+    {
+        // Stable deterministic samples: changes do not inject temporal noise.
+        float Z=1-2*(Ray+.5)/RayCount,A=2.399963229728653*Ray;
+        float R=sqrt(max(0,1-Z*Z));float3 D=float3(R*cos(A),R*sin(A),Z);
+        uint Seed=Hash(Probe*8191+Ray+1);float Backface;
+        float3 L=Path(Probes[Probe].xyz,D,Seed,Backface);Rejected+=Backface;
+        float Y[9];
+        Y[0]=.2820947918;Y[1]=.4886025119*D.y;Y[2]=.4886025119*D.z;Y[3]=.4886025119*D.x;
+        Y[4]=1.0925484306*D.x*D.y;Y[5]=1.0925484306*D.y*D.z;Y[6]=.3153915653*(3*D.z*D.z-1);
+        Y[7]=1.0925484306*D.x*D.z;Y[8]=.5462742153*(D.x*D.x-D.y*D.y);
+        [unroll]for(uint C=0;C<9;++C)Sum[C]+=L*Y[C];
+    }
+    [unroll]for(uint C=0;C<9;++C)Reduction[Lane*9+C]=Sum[C];Backfaces[Lane]=Rejected;
+    GroupMemoryBarrierWithGroupSync();
+    [unroll]for(uint Step=32;Step>0;Step>>=1)
+    {
+        if(Lane<Step) { [unroll]for(uint C=0;C<9;++C)Reduction[Lane*9+C]+=Reduction[(Lane+Step)*9+C];Backfaces[Lane]+=Backfaces[Lane+Step]; }
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if(Lane==0) [unroll]for(uint C=0;C<9;++C)
+    {
+        float Band=C==0?3.14159265359:(C<4?2.09439510239:.78539816339);
+        OutSH[Probe*9+C]=float4(Reduction[C]*(12.56637061436*Band/RayCount),C==0?(Backfaces[0]>.25*RayCount?-1:1):0);
+    }
+}

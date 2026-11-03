@@ -7,6 +7,7 @@
 #include "PRTGIVolumeData.h"
 #include "PRTGIVolumeManager.h"
 #include "PRTGIMultiBounce.h"
+#include "PRTGIRuntime.h"
 #include "PRTGISettings.h"
 #include "PRTGIViewExtension.h"
 #include "PostProcess/PostProcessInputs.h"
@@ -765,6 +766,7 @@ class FPRTGIModule final : public IModuleInterface
 public:
     virtual void StartupModule() override
     {
+        RuntimeGI = MakeUnique<PRTGI::FRuntimeGI>();
         ActorVolumes = MakeUnique<FPRTGIVolumeManager>(
             [](UWorld* World, ADirectionalLight* Light, const FBox& Bounds, FIntVector Counts, bool Local, bool Geometry, float Near, int32 Resolution)
             { return ComputeSceneSignature(World,Light,Bounds,Counts,Local,Geometry,Near,Resolution); },
@@ -787,6 +789,7 @@ public:
 
     virtual void ShutdownModule() override
     {
+        RuntimeGI.Reset();
         ActorVolumes.Reset();
         ClearProbeVisualization();
         SurfelBake.Reset(); LocalSurfels.Reset();
@@ -1020,6 +1023,8 @@ private:
     {
         if (ActorVolumeWorld.Get()==World)
         {
+            RuntimeGI->Reset();
+            bWasRuntimeGI=false;
             ActorVolumes->Reset(); ActorVolumeWorld.Reset();
             ENQUEUE_RENDER_COMMAND(PRTGIClearActorVolumes)([this](FRHICommandListImmediate&)
             { ActorRenderVolumes.Reset(); ActorRenderScene=nullptr; VisibilitySources_RenderThread.Reset(); VisibilityBuffer_RenderThread.SafeRelease(); DepthMomentsBuffer_RenderThread.SafeRelease();
@@ -1127,6 +1132,35 @@ private:
         ADirectionalLight* Light = FindPrimaryDirectionalLight(World);
         const double Now = FPlatformTime::Seconds();
         const bool bActorMode = bool(TActorIterator<APRTProbeVolume>(World));
+
+        const bool bRuntime=PRTGI::FRuntimeGI::IsEnabled() && IsPRTGIMode()
+            && CVarPRTGIEnable.GetValueOnGameThread()!=0;
+        if(bRuntime)
+        {
+            if(!bWasRuntimeGI)
+            {
+                ActorVolumes->Reset();
+                ClearProbeVisualization();
+                for(TActorIterator<APRTProbeVolume> It(World);It;++It)It->ClearProbeSpheres();
+            }
+            const bool Changed=RuntimeGI->Tick(World);
+            if(Changed || !bWasRuntimeGI)
+            {
+                ActorVolumeWorld=World;
+                auto Volumes=RuntimeGI->GetVolumes();const FScene* Scene=World->Scene->GetRenderScene();
+                ENQUEUE_RENDER_COMMAND(PRTGIPublishRuntime)([this,Volumes=MoveTemp(Volumes),Scene](FRHICommandListImmediate&) mutable
+                { ActorRenderVolumes=MoveTemp(Volumes);ActorRenderScene=Scene;bActorRenderMode=true; });
+            }
+            bWasRuntimeGI=true;
+            return true;
+        }
+        if(bWasRuntimeGI)
+        {
+            bWasRuntimeGI=false;
+            ActorVolumes->Reset();
+            ENQUEUE_RENDER_COMMAND(PRTGIClearRuntime)([this](FRHICommandListImmediate&)
+            { ActorRenderVolumes.Reset();ActorRenderScene=nullptr;bActorRenderMode=false; });
+        }
 
         if (PublishedTransport_GameThread.IsValid()
             && BakeState != EBakeState::Baking
@@ -2264,7 +2298,7 @@ private:
             PackedVolumes.Add(FVector4f(ReceiverMax + Translation, float(Volume.BlendFace)));
             PackedCoefficients.Append(Volume.Coefficients);
             VisibilitySources.Add(Volume.Visibility);
-            VisibilityInfos.Add(FVector4f(float(VisibilityOffset),Volume.Visibility?float(Volume.Visibility->Resolution):0.f,Volume.Geometry && Volume.Geometry->CacheVersion>=6?1.f:0.f,0));
+            VisibilityInfos.Add(FVector4f(float(VisibilityOffset),Volume.Visibility?float(Volume.Visibility->Resolution):0.f,Volume.Geometry && Volume.Geometry->CacheVersion>=6?1.f:0.f,Volume.bRuntimeGeometry?1.f:0.f));
             if(Volume.Visibility)VisibilityOffset+=Volume.Visibility->Planes.Num();
         };
         if (bHasTransport)
@@ -2299,13 +2333,14 @@ private:
         }
         FRDGBufferRef VolumeBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PRTGI.ProbeVolumes"), PackedVolumes);
         TSharedPtr<const PRTGI::FMultiBounceData,ESPMode::ThreadSafe> ContactGeometry;
-        if(bHasActors && (CVarPRTContactSamples.GetValueOnRenderThread()>0 || CVarPRTProbeVisibility.GetValueOnRenderThread()==3))
+        const bool bRuntimeGeometry=bHasActors && ActorRenderVolumes.ContainsByPredicate([](const auto& V){return V.bRuntimeGeometry;});
+        if(bHasActors && (bRuntimeGeometry || CVarPRTContactSamples.GetValueOnRenderThread()>0 || CVarPRTProbeVisibility.GetValueOnRenderThread()==3))
             for(const auto& Volume:ActorRenderVolumes)if(Volume.Geometry){ContactGeometry=Volume.Geometry;break;}
         if(ContactGeometry!=ContactGeometry_RenderThread || !ContactTriangles_RenderThread)
         {
             const TArray<FVector4f> Empty{FVector4f(0)};
-            ContactTriangles_RenderThread=GraphBuilder.ConvertToExternalBuffer(CreateStructuredBuffer(GraphBuilder,TEXT("PRTGI.ContactTriangles"),ContactGeometry?ContactGeometry->Triangles:Empty));
-            ContactNodes_RenderThread=GraphBuilder.ConvertToExternalBuffer(CreateStructuredBuffer(GraphBuilder,TEXT("PRTGI.ContactNodes"),ContactGeometry?ContactGeometry->Nodes:Empty));
+            ContactTriangles_RenderThread=GraphBuilder.ConvertToExternalBuffer(CreateStructuredBuffer(GraphBuilder,TEXT("PRTGI.ContactTriangles"),ContactGeometry && !ContactGeometry->Triangles.IsEmpty()?ContactGeometry->Triangles:Empty));
+            ContactNodes_RenderThread=GraphBuilder.ConvertToExternalBuffer(CreateStructuredBuffer(GraphBuilder,TEXT("PRTGI.ContactNodes"),ContactGeometry && !ContactGeometry->Nodes.IsEmpty()?ContactGeometry->Nodes:Empty));
             ContactGeometry_RenderThread=ContactGeometry;
         }
         FRDGBufferRef VisibilityBuffer,DepthMomentsBuffer;
@@ -2622,6 +2657,13 @@ private:
     void RegisterConsoleCommands()
     {
         IConsoleManager& Console = IConsoleManager::Get();
+        ConsoleObjects.Add(Console.RegisterConsoleCommand(TEXT("PRTGI.Runtime.Prepare"),
+            TEXT("Prepare reusable asset-local material charts for the PC runtime reference; does not bake scene transport or save assets."),
+            FConsoleCommandDelegate::CreateLambda([this]{UE_LOG(LogPRTGI,Display,TEXT("%s"),*RuntimeGI->Prepare(FindPreferredWorld()));}),ECVF_Default));
+        ConsoleObjects.Add(Console.RegisterConsoleCommand(TEXT("PRTGI.Runtime.Status"),TEXT("Report PC runtime reference generation and timing."),
+            FConsoleCommandDelegate::CreateLambda([this]{UE_LOG(LogPRTGI,Display,TEXT("%s"),*RuntimeGI->Status());}),ECVF_Default));
+        ConsoleObjects.Add(Console.RegisterConsoleCommand(TEXT("PRTGI.Runtime.Dump"),TEXT("Write published runtime probe SH to Saved/PRTGIRuntime/probes.csv."),
+            FConsoleCommandDelegate::CreateLambda([this]{UE_LOG(LogPRTGI,Display,TEXT("%s"),*RuntimeGI->Dump());}),ECVF_Default));
         ConsoleObjects.Add(Console.RegisterConsoleCommand(TEXT("PRTGI.ImportVolumes"),
             TEXT("Create editable Volume Actors from the current legacy grid/profile, reusing caches read-only. Does not save the map or bake."),
             FConsoleCommandDelegate::CreateRaw(this, &FPRTGIModule::ImportVolumeActors), ECVF_Default));
@@ -2730,6 +2772,8 @@ private:
     FTSTicker::FDelegateHandle TickHandle;
     TArray<IConsoleObject*> ConsoleObjects;
     TUniquePtr<FPRTGIVolumeManager> ActorVolumes;
+    TUniquePtr<PRTGI::FRuntimeGI> RuntimeGI;
+    bool bWasRuntimeGI=false;
     TWeakObjectPtr<UWorld> ActorVolumeWorld;
     TArray<FPRTGIRenderVolume> ActorRenderVolumes;
     TArray<TSharedPtr<const FPRTGIProbeVisibility,ESPMode::ThreadSafe>> VisibilitySources_RenderThread;

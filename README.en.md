@@ -4,7 +4,7 @@
 
 [User guide · GitHub Wiki](https://github.com/mazelines/UE5-PRT-GI/wiki)
 
-This `ue6` branch contains a probe-based global illumination plugin and host project for static scenes in **Unreal Engine 6.0**. Includes a Cornell Box showcase, real-time directional light relighting, 1–12 indirect bounces, independent Probe Volumes, and visualization.
+This `feat/runtime-surfel-gi` branch targets **Unreal Engine 6.0**, with **PC validation first and mobile expansion later**. It retains the static PRT plugin and adds an opt-in GPU runtime transport reference for changing furniture layouts. The new path currently uses triangle BVH traversal, not Surfel Radiance Cascades. See the [runtime guide and limitations (Korean)](docs/runtime-gi-pc.md). The remaining setup and cache instructions below describe the existing static PRT path.
 
 ![PRT GI Cornell Box showcase](Plugins/PRTGI/docs/images/prt-gi-showcase-ue6-cfcd80c5.png)
 
