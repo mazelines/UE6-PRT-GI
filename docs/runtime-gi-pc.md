@@ -87,4 +87,4 @@ RTX 4090 / i9-14900KF, UE6 Win64 Development Editor, DX12/SM6에서 세 모드�
 
 이 단계에는 에셋 캐시의 디스크 직렬화·쿠킹, 자동 프로브 clipmap, 국소 프로브 무효화, Surfel LOD·공간 해시, GPU BVH 갱신, Radiance Cascade 방향 병합, 시간 누적·노이즈 제거, 모바일 fallback이 없다. CPU의 전체 장면 BVH 재구성과 차트 배열 병합, SH 읽기, 픽셀별 BVH 가시성은 정확도 비교를 쉽게 하기 위한 기준 경로이며 최종 성능 구조가 아니다.
 
-후속 구현은 같은 배치·광원 변경 시나리오의 기준 SH와 화면을 보존한 상태에서 진행한다. 먼저 에셋 캐시 저장과 동적 인스턴스 갱신을 분리하고, 디스크 Surfel 추적으로 교체해 빛샘·누락·법선 오차를 비교한다. 이어 자동 clipmap과 Radiance Cascade, 국소 갱신·시간 재사용을 적용한다. PC에서 GPU 갱신·resolve 시간과 CPU 지연을 분리 측정한 뒤 모바일의 메모리·정밀도·대역폭·저사양 fallback을 검증한다.
+후속 구현은 같은 배치·광원 변경 시나리오의 기준 SH와 화면을 보존한 상태에서 진행한다. [Webgiya 소스 검토와 적용안](webgiya-surfel-cache-review.md)에 따라 에셋/인스턴스에 연결된 GPU Surfel 풀과 공간 인덱스를 먼저 구현한다. 기존 삼각형 BVH는 교차와 가시성의 비교 기준으로 유지한다. 이후 반복 조명 갱신, 조회용 방향별 가시성 캐시, 시간 필터를 단계적으로 검증한다. 자동 clipmap·Radiance Cascade와 모바일 확장은 그 이후 단계다. PC에서 GPU 갱신·resolve 시간과 CPU 지연을 분리 측정한 뒤 모바일의 메모리·정밀도·대역폭·저사양 fallback을 검증한다.
