@@ -1,0 +1,551 @@
+{
+  "date": "2026-11-03",
+  "branch": "feat/runtime-surfel-gi",
+  "base_commit": "0d542e5",
+  "build": {
+    "success": true,
+    "configuration": "UE6 Win64 Development Editor, DX12/SM6",
+    "module_suffix": 6163
+  },
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "cpu": "Intel Core i9-14900KF",
+    "viewport": [
+      3309,
+      1508
+    ],
+    "screen_percentage_mode": 0,
+    "screen_percentage": 100,
+    "hdr_capture_size": [
+      1399,
+      789
+    ],
+    "aa_method": 0,
+    "indirect_only": true,
+    "contact_samples_for_timings": 0,
+    "pre_exposure_override": 1,
+    "volumes": [
+      "PRT_ClassicBox",
+      "PRT_ColorBox"
+    ],
+    "probes": 1664,
+    "instances": 53,
+    "triangles": 11400,
+    "rays_per_probe": 256,
+    "max_bounces": 6,
+    "probes_per_batch": 32
+  },
+  "modes": {
+    "reference": {
+      "any_hit": 0,
+      "half_resolution": 0
+    },
+    "anyhit": {
+      "any_hit": 1,
+      "half_resolution": 0
+    },
+    "half": {
+      "any_hit": 1,
+      "half_resolution": 1
+    }
+  },
+  "defaults": {
+    "r.PRTGI.Runtime.VisibilityAnyHit": 1,
+    "r.PRTGI.Runtime.ResolveHalfResolution": 0
+  },
+  "cameras": {
+    "wide": {
+      "location": {
+        "x": -893.466503937298,
+        "y": 141.55153108220802,
+        "z": 609.1739683717565
+      },
+      "rotation": {
+        "pitch": -15.600000351663308,
+        "yaw": 26.40000071269545,
+        "roll": -6.442676795271262e-07
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      }
+    },
+    "sphere": {
+      "location": [
+        -167.8334034,
+        604.1362317,
+        296.9383142
+      ],
+      "rotation_pitch_yaw_roll": [
+        -5.314858,
+        14.956819,
+        0
+      ]
+    }
+  },
+  "timing_method": "Five interleaved ProfileGPU samples per mode after transport publication; sum of Runtime Irradiance Half and Indirect Only passes. No contact pass, transport update or total-frame time included. Wall-clock and editor background work can vary.",
+  "quality_method": "Linear PreTonemapHDRColor EXR, fixed camera, no exposure fitting. Comparison against closest-hit full-resolution implementation, not path-tracing ground truth. Repeat is the same reference mode recaptured after the other modes. Max error is in scene-linear RGB units. Static checks only verify new runtime switches have no effect, not comparison against an older executable.",
+  "timings": {
+    "wide": {
+      "reference": {
+        "samples_ms": [
+          7.253,
+          8.949,
+          7.112,
+          7.119,
+          7.009
+        ],
+        "median_ms": 7.119,
+        "min_ms": 7.009,
+        "max_ms": 8.949,
+        "raw_lines": [
+          [
+            "[2026.11.03-14.05.19:660][ 42]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 66.0% \u250a \u2588\u2588\u2588\u2588\u2588\u258e   \u2502 7.253 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  66.0% \u250a \u2588\u2588\u2588\u2588\u2588\u258e   \u2502  7.253 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.24:338][373]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 71.6% \u250a \u2588\u2588\u2588\u2588\u2588\u258b   \u2502 8.949 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  71.6% \u250a \u2588\u2588\u2588\u2588\u2588\u258b   \u2502  8.949 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.29:008][747]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 70.6% \u250a \u2588\u2588\u2588\u2588\u2588\u258b   \u2502 7.112 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  70.6% \u250a \u2588\u2588\u2588\u2588\u2588\u258b   \u2502  7.112 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.33:664][169]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 70.5% \u250a \u2588\u2588\u2588\u2588\u2588\u258b   \u2502 7.119 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  70.5% \u250a \u2588\u2588\u2588\u2588\u2588\u258b   \u2502  7.119 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.38:363][593]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 70.2% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502 7.009 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  70.2% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502 7.009 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ]
+        ]
+      },
+      "anyhit": {
+        "samples_ms": [
+          7.493,
+          7.218,
+          7.01,
+          6.897,
+          7.127
+        ],
+        "median_ms": 7.127,
+        "min_ms": 6.897,
+        "max_ms": 7.493,
+        "raw_lines": [
+          [
+            "[2026.11.03-14.05.21:227][153]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 65.9% \u250a \u2588\u2588\u2588\u2588\u2588\u258e   \u2502 7.493 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  65.9% \u250a \u2588\u2588\u2588\u2588\u2588\u258e   \u2502  7.493 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.25:914][485]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 64.1% \u250a \u2588\u2588\u2588\u2588\u2588\u258f   \u2502 7.218 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  64.1% \u250a \u2588\u2588\u2588\u2588\u2588\u258f   \u2502  7.218 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.30:568][897]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 70.0% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502 7.010 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  70.0% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502  7.010 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.35:221][316]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 69.7% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502 6.897 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  69.7% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502 6.897 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.39:912][740]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 70.4% \u250a \u2588\u2588\u2588\u2588\u2588\u258b   \u2502 7.127 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  70.4% \u250a \u2588\u2588\u2588\u2588\u2588\u258b   \u2502  7.127 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ]
+        ]
+      },
+      "half": {
+        "samples_ms": [
+          8.934999999999999,
+          8.844,
+          8.865,
+          8.891,
+          8.786
+        ],
+        "median_ms": 8.865,
+        "min_ms": 8.786,
+        "max_ms": 8.934999999999999,
+        "raw_lines": [
+          [
+            "[2026.11.03-14.05.22:778][262]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 37.6% \u250a \u2588\u2588\u2588      \u2502 4.808 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  37.6% \u250a \u2588\u2588\u2588      \u2502  4.808 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.05.22:778][262]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 32.3% \u250a \u2588\u2588\u258c      \u2502 4.127 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  32.3% \u250a \u2588\u2588\u258c      \u2502  4.127 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.27:460][615]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 40.9% \u250a \u2588\u2588\u2588\u258e     \u2502 5.021 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  40.9% \u250a \u2588\u2588\u2588\u258e     \u2502  5.021 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.05.27:460][615]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 31.1% \u250a \u2588\u2588\u258d      \u2502 3.823 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  31.1% \u250a \u2588\u2588\u258d      \u2502  3.823 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.32:120][ 35]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 42.5% \u250a \u2588\u2588\u2588\u258d     \u2502 5.034 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  42.5% \u250a \u2588\u2588\u2588\u258d     \u2502  5.034 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.05.32:120][ 35]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 32.3% \u250a \u2588\u2588\u258c      \u2502 3.831 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  32.3% \u250a \u2588\u2588\u258c      \u2502  3.831 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.36:788][456]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 42.7% \u250a \u2588\u2588\u2588\u258d     \u2502 5.076 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  42.7% \u250a \u2588\u2588\u2588\u258d     \u2502  5.076 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.05.36:788][456]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 32.1% \u250a \u2588\u2588\u258c      \u2502 3.815 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  32.1% \u250a \u2588\u2588\u258c      \u2502  3.815 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.41:474][880]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 42.4% \u250a \u2588\u2588\u2588\u258d     \u2502 4.995 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  42.4% \u250a \u2588\u2588\u2588\u258d     \u2502  4.995 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.05.41:474][880]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 32.2% \u250a \u2588\u2588\u258c      \u2502 3.791 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  32.2% \u250a \u2588\u2588\u258c      \u2502  3.791 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ]
+        ]
+      }
+    },
+    "sphere": {
+      "reference": {
+        "samples_ms": [
+          57.919,
+          57.97,
+          65.068,
+          55.011,
+          61.502
+        ],
+        "median_ms": 57.97,
+        "min_ms": 55.011,
+        "max_ms": 65.068,
+        "raw_lines": [
+          [
+            "[2026.11.03-14.05.50:737][383]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 94.9% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 57.919 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  94.9% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 57.919 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.55:651][493]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 95.0% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 57.970 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  95.0% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 57.970 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.06.00:469][617]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 95.6% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b \u2502 65.068 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  95.6% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b \u2502 65.068 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.06.05:329][745]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 94.8% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 55.011 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  94.8% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 55.011 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.06.10:230][863]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 95.3% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b \u2502 61.502 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  95.3% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b \u2502 61.502 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ]
+        ]
+      },
+      "anyhit": {
+        "samples_ms": [
+          56.382,
+          53.614,
+          52.052,
+          52.052,
+          58.243
+        ],
+        "median_ms": 53.614,
+        "min_ms": 52.052,
+        "max_ms": 58.243,
+        "raw_lines": [
+          [
+            "[2026.11.03-14.05.52:408][410]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 94.8% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 56.382 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  94.8% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 56.382 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.57:273][517]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 94.5% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 53.614 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  94.5% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 53.614 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.06.02:109][646]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 94.6% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 52.052 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  94.6% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 52.052 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.06.06:968][774]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 94.5% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 52.052 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  94.5% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 52.052 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.06.11:893][890]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 94.6% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 58.243 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  94.6% \u250a \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c \u2502 58.243 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ]
+        ]
+      },
+      "half": {
+        "samples_ms": [
+          22.979,
+          17.879,
+          17.977,
+          18.151,
+          22.203
+        ],
+        "median_ms": 18.151,
+        "min_ms": 17.879,
+        "max_ms": 22.979,
+        "raw_lines": [
+          [
+            "[2026.11.03-14.05.53:867][445]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 74.9% \u250a \u2588\u2588\u2588\u2588\u2588\u2589   \u2502 19.483 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  74.9% \u250a \u2588\u2588\u2588\u2588\u2588\u2589   \u2502 19.483 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.05.53:867][445]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 13.4% \u250a \u2588        \u2502  3.496 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  13.4% \u250a \u2588        \u2502  3.496 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.05.58:728][560]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 69.0% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502 14.391 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  69.0% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502 14.391 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.05.58:728][560]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 16.7% \u250a \u2588\u258e       \u2502  3.488 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  16.7% \u250a \u2588\u258e       \u2502  3.488 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.06.03:602][688]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 68.8% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502 14.422 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  68.8% \u250a \u2588\u2588\u2588\u2588\u2588\u258c   \u2502 14.422 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.06.03:602][688]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 16.9% \u250a \u2588\u258e       \u2502  3.555 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  16.9% \u250a \u2588\u258e       \u2502  3.555 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.06.08:468][816]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 68.7% \u250a \u2588\u2588\u2588\u2588\u2588\u258d   \u2502 14.548 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  68.7% \u250a \u2588\u2588\u2588\u2588\u2588\u258d   \u2502 14.548 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.06.08:468][816]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 17.0% \u250a \u2588\u258e       \u2502  3.603 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  17.0% \u250a \u2588\u258e       \u2502  3.603 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ],
+          [
+            "[2026.11.03-14.06.13:369][929]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 73.7% \u250a \u2588\u2588\u2588\u2588\u2588\u2589   \u2502 18.804 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  73.7% \u250a \u2588\u2588\u2588\u2588\u2588\u2589   \u2502 18.804 ms \u2503                   PRTGI Runtime Irradiance Half                                                            \u2503",
+            "[2026.11.03-14.06.13:369][929]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502 13.3% \u250a \u2588        \u2502  3.399 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502  13.3% \u250a \u2588        \u2502  3.399 ms \u2503                   PRTGI Indirect Only                                                                      \u2503"
+          ]
+        ]
+      }
+    }
+  },
+  "images": [
+    {
+      "fixture": "wide-final",
+      "mode": "anyhit",
+      "pixels": 1103811,
+      "rgb_rmse": 0.0,
+      "rgb_relative_rmse": 0.0,
+      "rgb_mae": 0.0,
+      "reference_mean_luminance": 119.91665581237979,
+      "candidate_mean_luminance": 119.91665581237979,
+      "relative_luminance_bias": 0.0,
+      "max_abs_rgb": 0.0
+    },
+    {
+      "fixture": "wide-final",
+      "mode": "half",
+      "pixels": 1103811,
+      "rgb_rmse": 0.9252016389006507,
+      "rgb_relative_rmse": 0.0016404503558549535,
+      "rgb_mae": 0.021412066920876854,
+      "reference_mean_luminance": 119.91665581237979,
+      "candidate_mean_luminance": 119.91465583937716,
+      "relative_luminance_bias": -1.667802515902112e-05,
+      "max_abs_rgb": 256.0
+    },
+    {
+      "fixture": "wide-final",
+      "mode": "repeat",
+      "pixels": 1103811,
+      "rgb_rmse": 0.29127257005528107,
+      "rgb_relative_rmse": 0.0005164476273147648,
+      "rgb_mae": 0.0024880844637351868,
+      "reference_mean_luminance": 119.91665581237979,
+      "candidate_mean_luminance": 119.91670639531473,
+      "relative_luminance_bias": 4.218174247620319e-07,
+      "max_abs_rgb": 128.0
+    },
+    {
+      "fixture": "sphere-final",
+      "mode": "anyhit",
+      "pixels": 1103811,
+      "rgb_rmse": 0.0,
+      "rgb_relative_rmse": 0.0,
+      "rgb_mae": 0.0,
+      "reference_mean_luminance": 1651.5654174578797,
+      "candidate_mean_luminance": 1651.5654174578797,
+      "relative_luminance_bias": 0.0,
+      "max_abs_rgb": 0.0
+    },
+    {
+      "fixture": "sphere-final",
+      "mode": "half",
+      "pixels": 1103811,
+      "rgb_rmse": 4.804164651094486,
+      "rgb_relative_rmse": 0.002154400607332513,
+      "rgb_mae": 0.4005966601166323,
+      "reference_mean_luminance": 1651.5654174578797,
+      "candidate_mean_luminance": 1651.5483675382834,
+      "relative_luminance_bias": -1.0323490318043915e-05,
+      "max_abs_rgb": 256.0
+    },
+    {
+      "fixture": "sphere-final",
+      "mode": "repeat",
+      "pixels": 1103811,
+      "rgb_rmse": 2.9165237006706355,
+      "rgb_relative_rmse": 0.001307898643855391,
+      "rgb_mae": 0.1696785047440187,
+      "reference_mean_luminance": 1651.5654174578797,
+      "candidate_mean_luminance": 1651.5660617029546,
+      "relative_luminance_bias": 3.900814752806148e-07,
+      "max_abs_rgb": 256.0
+    },
+    {
+      "fixture": "sphere-moved",
+      "mode": "anyhit",
+      "pixels": 1103811,
+      "rgb_rmse": 4.051430414336568,
+      "rgb_relative_rmse": 0.001895666836882164,
+      "rgb_mae": 0.3557330013924485,
+      "reference_mean_luminance": 1612.9301331949036,
+      "candidate_mean_luminance": 1612.927186596256,
+      "relative_luminance_bias": -1.8268606848698894e-06,
+      "max_abs_rgb": 256.0
+    },
+    {
+      "fixture": "sphere-moved",
+      "mode": "half",
+      "pixels": 1103811,
+      "rgb_rmse": 5.45386168178605,
+      "rgb_relative_rmse": 0.002551865308242544,
+      "rgb_mae": 0.4746742573381373,
+      "reference_mean_luminance": 1612.9301331949036,
+      "candidate_mean_luminance": 1612.90682569824,
+      "relative_luminance_bias": -1.445040686149461e-05,
+      "max_abs_rgb": 568.0
+    },
+    {
+      "fixture": "sphere-moved",
+      "mode": "repeat",
+      "pixels": 1103811,
+      "rgb_rmse": 3.4705640373440123,
+      "rgb_relative_rmse": 0.0016238790940572656,
+      "rgb_mae": 0.25940703012864824,
+      "reference_mean_luminance": 1612.9301331949036,
+      "candidate_mean_luminance": 1612.9283529836175,
+      "relative_luminance_bias": -1.1037125846517705e-06,
+      "max_abs_rgb": 256.0
+    },
+    {
+      "fixture": "sphere-contact",
+      "mode": "anyhit",
+      "pixels": 1103811,
+      "rgb_rmse": 0.0,
+      "rgb_relative_rmse": 0.0,
+      "rgb_mae": 0.0,
+      "reference_mean_luminance": 1628.9053444575204,
+      "candidate_mean_luminance": 1628.9053444575204,
+      "relative_luminance_bias": 0.0,
+      "max_abs_rgb": 0.0
+    },
+    {
+      "fixture": "sphere-contact",
+      "mode": "half",
+      "pixels": 1103811,
+      "rgb_rmse": 4.687315649069675,
+      "rgb_relative_rmse": 0.0021254487557570037,
+      "rgb_mae": 0.3878574623131436,
+      "reference_mean_luminance": 1628.9053444575204,
+      "candidate_mean_luminance": 1628.885120460296,
+      "relative_luminance_bias": -1.2415698243594265e-05,
+      "max_abs_rgb": 256.0
+    },
+    {
+      "fixture": "sphere-contact",
+      "mode": "repeat",
+      "pixels": 1103811,
+      "rgb_rmse": 3.7886447035681967,
+      "rgb_relative_rmse": 0.001717949200370715,
+      "rgb_mae": 0.2950287685120007,
+      "reference_mean_luminance": 1628.9053444575204,
+      "candidate_mean_luminance": 1628.90249822986,
+      "relative_luminance_bias": -1.7473253863619676e-06,
+      "max_abs_rgb": 256.0
+    },
+    {
+      "fixture": "static",
+      "mode": "anyhit",
+      "pixels": 1103811,
+      "rgb_rmse": 1.298043323505637,
+      "rgb_relative_rmse": 0.0017138426430782037,
+      "rgb_mae": 0.030234644638740992,
+      "reference_mean_luminance": 165.729030717034,
+      "candidate_mean_luminance": 165.72838516448923,
+      "relative_luminance_bias": -3.895229109718545e-06,
+      "max_abs_rgb": 256.0
+    },
+    {
+      "fixture": "static",
+      "mode": "half",
+      "pixels": 1103811,
+      "rgb_rmse": 1.298043323505637,
+      "rgb_relative_rmse": 0.0017138426430782037,
+      "rgb_mae": 0.030234644638740992,
+      "reference_mean_luminance": 165.729030717034,
+      "candidate_mean_luminance": 165.72838516448923,
+      "relative_luminance_bias": -3.895229109718545e-06,
+      "max_abs_rgb": 256.0
+    },
+    {
+      "fixture": "static",
+      "mode": "repeat",
+      "pixels": 1103811,
+      "rgb_rmse": 0.5031781714935829,
+      "rgb_relative_rmse": 0.0006643601116816458,
+      "rgb_mae": 0.003682997662945317,
+      "reference_mean_luminance": 165.729030717034,
+      "candidate_mean_luminance": 165.72869562271077,
+      "relative_luminance_bias": -2.0219410067333264e-06,
+      "max_abs_rgb": 256.0
+    }
+  ],
+  "additional_half_buffer_bytes_at_native_size": 19965920,
+  "limits": [
+    "Half resolution regresses the wide-view GPU time and remains opt-in.",
+    "Whole-image RMSE is not a bound on local silhouette errors; depth/normal thresholds are heuristic.",
+    "The same reference has nonzero frame-to-frame capture differences in some views.",
+    "Limited Showcase fixtures, not mobile or packaged-build validation."
+  ],
+  "automation": [
+    {
+      "name": "PRTGI.Capture.ConsoleScope",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Integration.EditorPIECacheIdentity",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Math.ConstantRadianceProducesPiIrradiance",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Math.FibonacciProjectionRecoversSH3",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.MultiBounce.AdaptiveBudget",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.MultiBounce.AnalyticTwoPlanes",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.MultiBounce.MaterialChartIsolation",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.MultiBounce.SurfaceBindingAndThinOccluder",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Runtime.AnalyticHemisphere",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Settings.MapProfileIsolation",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Surfel.CaptureAuditGrazing",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Surfel.CubeAxialDepth",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Surfel.PartialCaptureAudit",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Surfel.RelightAndPersistence",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Visibility.CapturedPlaneMapping",
+      "result": "Success"
+    },
+    {
+      "name": "PRTGI.Visibility.NearClipSafety",
+      "result": "Success"
+    }
+  ],
+  "moving_geometry": {
+    "actor": "Color_Box_Sphere",
+    "original_position_cm": [
+      60,
+      645,
+      220
+    ],
+    "moved_position_cm": [
+      60,
+      670,
+      220
+    ],
+    "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=1664 Generation=2 Discarded=0 Pending=0 Published=2 ChartUpdates=1 SnapshotMs=19.292 ConvergenceSeconds=1.220 Error=",
+    "restored_before_contact_fixture": true
+  },
+  "map_sha256": "b814f80c59d5b6a49275f0d93e17f4ddf9dae1296b1f849dda0eefa32785a845",
+  "map_note": "Pre-existing modified map excluded from this commit. On-disk last-write time remains 2026-11-03 22:55:55 KST, before the 23:00 validation editor launch. This hash is not the earlier runtime-reference task hash."
+}

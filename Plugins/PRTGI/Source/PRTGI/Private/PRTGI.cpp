@@ -55,6 +55,10 @@ DEFINE_LOG_CATEGORY_STATIC(LogPRTGI, Log, All);
 
 namespace
 {
+    TAutoConsoleVariable<int32> CVarPRTRuntimeVisibilityAnyHit(TEXT("r.PRTGI.Runtime.VisibilityAnyHit"),1,
+        TEXT("Runtime probe visibility: 0 closest-hit reference, 1 stop at the first blocker. Same binary visibility; contact distances remain closest-hit."),ECVF_RenderThreadSafe);
+    TAutoConsoleVariable<int32> CVarPRTRuntimeResolveHalfResolution(TEXT("r.PRTGI.Runtime.ResolveHalfResolution"),0,
+        TEXT("Experimental runtime-only irradiance gather: 0 full resolution, 1 half resolution with depth/normal/volume checks and full-resolution fallback. Material response and contact occlusion stay full resolution. No temporal history."),ECVF_RenderThreadSafe);
     TAutoConsoleVariable<int32> CVarPRTProbeVisibility(TEXT("r.PRTGI.ProbeVisibility"),1,
         TEXT("Probe visibility: 0 disabled, 1 first-hit planes, 2 depth moments, 3 exact static BVH segments (higher cost)."),ECVF_RenderThreadSafe);
     TAutoConsoleVariable<float> CVarPRTVisibilityBias(TEXT("r.PRTGI.VisibilityBiasCm"),1.f,
@@ -181,6 +185,10 @@ namespace
         SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float2>, ProbeDepthMoments)
         SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>, ProbeVisibilityVolumes)
         SHADER_PARAMETER(uint32, ProbeVisibilityEnabled)
+        SHADER_PARAMETER(uint32, RuntimeVisibilityAnyHit)
+        SHADER_PARAMETER(uint32, RuntimeResolveHalfResolution)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D<float4>, RuntimeIrradianceTexture)
+        SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, RuntimeIrradianceOutput)
         SHADER_PARAMETER(float, VisibilityBiasCm)
         SHADER_PARAMETER(float, HemisphereTransition)
         SHADER_PARAMETER(uint32, DebugMode)
@@ -240,6 +248,17 @@ namespace
         { return IsFeatureLevelSupported(Parameters.Platform,ERHIFeatureLevel::SM6); }
     };
     IMPLEMENT_GLOBAL_SHADER(FPRTGIContactCS,"/Plugin/PRTGI/Private/PRTGIApply.usf","ContactCS",SF_Compute);
+
+    class FPRTGIRuntimeResolveCS : public FGlobalShader
+    {
+    public:
+        DECLARE_GLOBAL_SHADER(FPRTGIRuntimeResolveCS);
+        SHADER_USE_PARAMETER_STRUCT(FPRTGIRuntimeResolveCS,FGlobalShader);
+        using FParameters=FPRTGIApplyParameters;
+        static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
+        { return IsFeatureLevelSupported(Parameters.Platform,ERHIFeatureLevel::SM6); }
+    };
+    IMPLEMENT_GLOBAL_SHADER(FPRTGIRuntimeResolveCS,"/Plugin/PRTGI/Private/PRTGIApply.usf","RuntimeResolveCS",SF_Compute);
 
     class FPRTGIPublishCS : public FGlobalShader
     {
@@ -2374,6 +2393,7 @@ private:
         Parameters->ProbeDepthMoments=GraphBuilder.CreateSRV(DepthMomentsBuffer);
         Parameters->ProbeVisibilityVolumes=GraphBuilder.CreateSRV(VisibilityInfoBuffer);
         Parameters->ProbeVisibilityEnabled=uint32(FMath::Clamp(CVarPRTProbeVisibility.GetValueOnRenderThread(),0,3));
+        Parameters->RuntimeVisibilityAnyHit=CVarPRTRuntimeVisibilityAnyHit.GetValueOnRenderThread()!=0;
         Parameters->VisibilityBiasCm=FMath::Max(.001f,CVarPRTVisibilityBias.GetValueOnRenderThread());
         Parameters->HemisphereTransition=FMath::Clamp(CVarPRTHemisphereTransition.GetValueOnRenderThread(),0.f,.5f);
         Parameters->DebugMode=uint32(FMath::Clamp(CVarPRTDebug.GetValueOnRenderThread(),0,7));
@@ -2393,6 +2413,11 @@ private:
         Parameters->HasTransport = bHasTransport || bHasActors ? 1u : 0u;
         Parameters->View = View.ViewUniformBuffer;
 
+        Parameters->RuntimeResolveHalfResolution=bRuntimeGeometry && Parameters->DebugMode==0
+            && CVarPRTRuntimeResolveHalfResolution.GetValueOnRenderThread()!=0;
+        Parameters->RuntimeIrradianceTexture=Resources.GBufferA;
+        Parameters->RuntimeIrradianceOutput=nullptr;
+
         Parameters->ContactHalfResolution=CVarPRTContactHalfResolution.GetValueOnRenderThread()!=0
             && Parameters->ContactNodeCount>0 && Parameters->ContactSamples>0
             && Parameters->ContactRadius>0 && (Parameters->DebugMode==0 || Parameters->DebugMode==4);
@@ -2411,6 +2436,20 @@ private:
             FComputeShaderUtils::AddPass(GraphBuilder,RDG_EVENT_NAME("PRTGI Contact Half"),ContactShader,
                 ContactParameters,FComputeShaderUtils::GetGroupCount(HalfSize,FIntPoint(8,8)));
             Parameters->ContactTexture=Contact;
+        }
+
+        if(Parameters->RuntimeResolveHalfResolution)
+        {
+            const FIntPoint HalfSize=FIntPoint::DivideAndRoundUp(View.ViewRect.Size(),2);
+            FRDGTextureRef Irradiance=GraphBuilder.CreateTexture(FRDGTextureDesc::Create2D(HalfSize,
+                PF_A32B32G32R32F,FClearValueBinding::None,TexCreate_ShaderResource|TexCreate_UAV),TEXT("PRTGI.RuntimeIrradianceHalf"));
+            auto* GatherParameters=GraphBuilder.AllocParameters<FPRTGIApplyParameters>();
+            *GatherParameters=*Parameters;
+            GatherParameters->RuntimeIrradianceOutput=GraphBuilder.CreateUAV(Irradiance);
+            TShaderMapRef<FPRTGIRuntimeResolveCS> GatherShader(GetGlobalShaderMap(GMaxRHIShaderPlatform));
+            FComputeShaderUtils::AddPass(GraphBuilder,RDG_EVENT_NAME("PRTGI Runtime Irradiance Half"),GatherShader,
+                GatherParameters,FComputeShaderUtils::GetGroupCount(HalfSize,FIntPoint(8,8)));
+            Parameters->RuntimeIrradianceTexture=Irradiance;
         }
 
         TShaderMapRef<FPRTGIApplyCS> ComputeShader(GetGlobalShaderMap(View.GetFeatureLevel()));

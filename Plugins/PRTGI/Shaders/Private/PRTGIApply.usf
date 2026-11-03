@@ -11,6 +11,10 @@ StructuredBuffer<float4> ProbeVisibilityPlanes;
 StructuredBuffer<float2> ProbeDepthMoments;
 StructuredBuffer<float4> ProbeVisibilityVolumes;
 uint ProbeVisibilityEnabled;
+uint RuntimeVisibilityAnyHit;
+uint RuntimeResolveHalfResolution;
+Texture2D<float4> RuntimeIrradianceTexture;
+RWTexture2D<float4> RuntimeIrradianceOutput;
 float VisibilityBiasCm;
 float HemisphereTransition;
 uint DebugMode;
@@ -46,7 +50,7 @@ bool ContactBoxHit(float3 O,float3 D,float3 Min,float3 Max,float Limit)
     return Hi>=Lo;
 }
 
-float ContactDistance(float3 O,float3 D,float MaxDistance,float MinDistance)
+float ContactTrace(float3 O,float3 D,float MaxDistance,float MinDistance,bool AnyHit)
 {
     float Limit=MaxDistance;
     uint Node=0;
@@ -61,11 +65,21 @@ float ContactDistance(float3 O,float3 D,float MaxDistance,float MinDistance)
             float3 P=cross(D,E2);float Det=dot(E1,P);if(abs(Det)<1.e-8)continue;
             float3 Delta=O-A;float U=dot(Delta,P)/Det;if(U<0 || U>1)continue;
             float3 Q=cross(Delta,E1);float V=dot(D,Q)/Det;if(V<0 || U+V>1)continue;
-            float Distance=dot(E2,Q)/Det;if(Distance>MinDistance && Distance<Limit)Limit=Distance;
+            float Distance=dot(E2,Q)/Det;
+            if(Distance>MinDistance && Distance<Limit)
+            {
+                if(AnyHit)return Distance;
+                Limit=Distance;
+            }
         }
         ++Node;
     }
     return Limit;
+}
+
+float ContactDistance(float3 O,float3 D,float MaxDistance,float MinDistance)
+{
+    return ContactTrace(O,D,MaxDistance,MinDistance,false);
 }
 
 float ContactVisibility(float3 Position,float3 Normal,uint2 Pixel)
@@ -193,7 +207,10 @@ float ProbeVisibility(uint Volume,int ProbeIndexInVolume,float3 ProbeToSurface)
         float3 Origin=ProbeVolumes[Volume*5].xyz-ContactWorldTranslation
             +float3(Coordinate)/((Counts-1)*ProbeVolumes[Volume*5+1].xyz);
         float Distance=length(ProbeToSurface),Limit=max(0,Distance-VisibilityBiasCm);
-        return ContactDistance(Origin,ProbeToSurface/Distance,Limit,.001)<Limit?0:1;
+        // Segment visibility needs any blocker, not the nearest distance.
+        // Keep closest-hit contact attenuation and the static reference unchanged.
+        return ContactTrace(Origin,ProbeToSurface/Distance,Limit,.001,
+            RuntimeGeometry && RuntimeVisibilityAnyHit!=0)<Limit?0:1;
     }
     if(R==0)return 1;
     int Face;float2 UV;VisibilityCubeUV(ProbeToSurface,Face,UV);
@@ -357,6 +374,79 @@ float ReconstructContact(int2 LocalPixel,float3 P,float3 N)
     return Edge || WeightSum<.1?ContactVisibility(P,N,ViewRectMin+LocalPixel):Sum/WeightSum;
 }
 
+// Select on both grids so reconstruction never crosses a volume boundary.
+uint SelectVolume(float3 Position)
+{
+    uint Selected = 0xffffffff;
+    int BestPriority = -2147483647;
+    float BestCellVolume = 3.4e38;
+    for (uint Volume = 0; Volume < VolumeCount; ++Volume)
+    {
+        if (!ContainsReceiver(Volume, Position)) continue;
+        float3 CellSize = rcp(ProbeVolumes[Volume * 5 + 1].xyz) / (ProbeVolumes[Volume * 5 + 2].xyz - 1.0);
+        float CellVolume = CellSize.x * CellSize.y * CellSize.z;
+        int Priority = int(ProbeVolumes[Volume * 5 + 2].w);
+        if (Priority > BestPriority || (Priority == BestPriority && CellVolume < BestCellVolume))
+        { Selected = Volume; BestCellVolume = CellVolume; BestPriority = Priority; }
+    }
+    return Selected;
+}
+
+[numthreads(NUM_THREADS,NUM_THREADS,1)]
+void RuntimeResolveCS(uint3 ID:SV_DispatchThreadID)
+{
+    int2 HalfSize=(ViewSize+1)/2;
+    if(any(ID.xy>=uint2(HalfSize)))return;
+    RuntimeIrradianceOutput[ID.xy]=0;
+    int2 Local=min(int2(ID.xy)*2,ViewSize-1),Pixel=ViewRectMin+Local;
+    float Z=DepthTexture.Load(int3(Pixel,0));
+    [branch]if(Z<=0)return;
+    [branch]if(DecodeShadingModelId(MetallicTexture.Load(int3(Pixel,0)).a)==SHADINGMODELID_UNLIT)return;
+    float3 P=ReceiverPosition(Local,Z);
+    uint Selected=SelectVolume(P);
+    [branch]if(Selected==0xffffffff)return;
+    [branch]if(ProbeVisibilityVolumes[Selected].w==0)return;
+    float3 N=normalize(DecodeNormal(NormalTexture.Load(int3(Pixel,0)).xyz));
+    float Basis[9];EvaluateSH3(N,Basis);
+    float3 Support,Statistics;
+    float3 E=SampleVolume(Selected,P,N,Basis,Support,Statistics);
+    // FP32 stores scene-linear irradiance without pre-exposure overflow. Alpha
+    // identifies the volume; zero is invalid, not a valid black illumination.
+    RuntimeIrradianceOutput[ID.xy]=float4(E,float(Selected+1));
+}
+
+bool ReconstructRuntimeIrradiance(int2 Local,uint Selected,float3 P,float3 N,out float3 E)
+{
+    E=0;
+    if(RuntimeResolveHalfResolution==0 || ProbeVisibilityVolumes[Selected].w==0)return false;
+    float3 Cell=rcp((ProbeVolumes[Selected*5+2].xyz-1)*ProbeVolumes[Selected*5+1].xyz);
+    float MaxSeparation=.1*min(Cell.x,min(Cell.y,Cell.z));
+    int2 HalfSize=(ViewSize+1)/2;
+    float2 Grid=float2(Local)*.5,T=frac(Grid);
+    int2 Base=int2(floor(Grid));
+    float WeightSum=0;
+    [unroll]for(int I=0;I<4;++I)
+    {
+        int2 Tap=int2(I&1,I>>1);
+        float2 W=lerp(1-T,T,float2(Tap));float Weight=W.x*W.y;
+        if(Weight<=0)continue;
+        int2 H=min(Base+Tap,HalfSize-1),L=min(H*2,ViewSize-1),Pixel=ViewRectMin+L;
+        float4 Sample=RuntimeIrradianceTexture.Load(int3(H,0));
+        if(Sample.w!=float(Selected+1))return false;
+        float Z=DepthTexture.Load(int3(Pixel,0));
+        if(Z<=0)return false;
+        float3 SN=normalize(DecodeNormal(NormalTexture.Load(int3(Pixel,0)).xyz));
+        float3 Delta=ReceiverPosition(L,Z)-P;
+        // Reject silhouettes, thin layers and sharp/normal-mapped edges. Test
+        // both tangent planes so a sloped floor can still reuse its neighbours.
+        if(dot(SN,N)<.9995 || max(abs(dot(Delta,N)),abs(dot(Delta,SN)))>.1
+            || length(Delta)>MaxSeparation)return false;
+        E+=Sample.rgb*Weight;WeightSum+=Weight;
+    }
+    E/=max(WeightSum,1.e-6);
+    return WeightSum>.99;
+}
+
 [numthreads(NUM_THREADS, NUM_THREADS, 1)]
 void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
 {
@@ -402,18 +492,7 @@ void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
 
     float Basis[9];
     EvaluateSH3(WorldNormal, Basis);
-    uint Selected = 0xffffffff;
-    int BestPriority = -2147483647;
-    float BestCellVolume = 3.4e38;
-    for (uint Volume = 0; Volume < VolumeCount; ++Volume)
-    {
-        if (!ContainsReceiver(Volume, TranslatedWorldPosition)) continue;
-        float3 CellSize = rcp(ProbeVolumes[Volume * 5 + 1].xyz) / (ProbeVolumes[Volume * 5 + 2].xyz - 1.0);
-        float CellVolume = CellSize.x * CellSize.y * CellSize.z;
-        int Priority = int(ProbeVolumes[Volume * 5 + 2].w);
-        if (Priority > BestPriority || (Priority == BestPriority && CellVolume < BestCellVolume))
-        { Selected = Volume; BestCellVolume = CellVolume; BestPriority = Priority; }
-    }
+    uint Selected = SelectVolume(TranslatedWorldPosition);
     if (Selected == 0xffffffff) return;
     // Transport remains Lambertian. Reserve the receiver's GGX lobe energy
     // using UE's analytic GGX energy fit. v3-v5 preserve legacy shading.
@@ -430,8 +509,9 @@ void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
         float3 SpecularEnergy=(1+F0*((1-E)/E))*(E*F0+Ef*(F90-F0));
         DiffuseAlbedo*=saturate(1-Luminance(SpecularEnergy));
     }
-    float3 Support,Statistics;
-    float3 Irradiance = SampleVolume(Selected, TranslatedWorldPosition, WorldNormal, Basis, Support,Statistics);
+    float3 Support=0,Statistics=0,Irradiance;
+    [branch]if(!ReconstructRuntimeIrradiance(int2(DispatchThreadId.xy),Selected,TranslatedWorldPosition,WorldNormal,Irradiance))
+        Irradiance=SampleVolume(Selected,TranslatedWorldPosition,WorldNormal,Basis,Support,Statistics);
     if(DebugMode!=0 && DebugMode!=4)
     {
         float Value=DebugMode==1?Support.z/max(Support.y,1.e-6):DebugMode==2?Support.z:Support.y/max(Support.x,1.e-6);

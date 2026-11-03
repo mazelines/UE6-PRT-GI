@@ -14,6 +14,7 @@ This `ue6` branch forks [wuzhy66/UE5-PRT-GI](https://github.com/wuzhy66/UE5-PRT-
 
 | Area | Fork baseline | Changes in this UE6 branch |
 |---|---|---|
+| Runtime resolve | No runtime layout-change path | Added any-hit BVH visibility and optional half-resolution irradiance with depth/normal/volume checks and full-resolution fallback. Close views improved but the wide view regressed, so half resolution remains disabled by default. [Measurements](docs/runtime-gi-pc.md) |
 | UE6 integration | UE 5.8 plugin with numeric GI mode selection | Added UE6 host project/targets and engine-enum mode selection; fixed PRT failing to activate after precomputation in UE6 |
 | Secondary surface lookup | Spatial search for nearby captured Surfel clusters at ray hits | Bound captured samples and transport sources to triangles; separated geometric/shading normals and added numerical ray-origin offsets to reduce incorrect associations and self-intersections |
 | Material lookup | Reused captured Surfel material values via nearby source lookup | Added per-triangle 16×16 charts preserving original UVs and vertex colors, with base color, metallic and tangent-space normals; added interior coverage auditing and restricted retries |

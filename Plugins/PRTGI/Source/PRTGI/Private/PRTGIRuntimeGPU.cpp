@@ -52,9 +52,9 @@ FRuntimeGPU::~FRuntimeGPU()
         S->Materials.SafeRelease();S->Lights.SafeRelease();S->Probes.SafeRelease();S->SH.SafeRelease();
     });
 }
-void FRuntimeGPU::Submit(TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Scene,int32 Budget)
+void FRuntimeGPU::Submit(TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Scene,int32 InProbeBudget)
 {
-    check(!State->Scene);State->Scene=Scene;State->Budget=FMath::Clamp(Budget,1,256);
+    check(!State->Scene);State->Scene=Scene;State->Budget=FMath::Clamp(InProbeBudget,1,256);
 }
 bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
 {
