@@ -20,6 +20,7 @@ public:
     FString Prepare(UWorld* World);
     FString Status() const;
     FString Dump() const;
+    FString AuditSurfels();
     const TArray<FPRTGIRenderVolume>& GetVolumes() const;
 private:
     struct FState;

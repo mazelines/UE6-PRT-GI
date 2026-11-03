@@ -2703,6 +2703,8 @@ private:
             FConsoleCommandDelegate::CreateLambda([this]{UE_LOG(LogPRTGI,Display,TEXT("%s"),*RuntimeGI->Status());}),ECVF_Default));
         ConsoleObjects.Add(Console.RegisterConsoleCommand(TEXT("PRTGI.Runtime.Dump"),TEXT("Write published runtime probe SH to Saved/PRTGIRuntime/probes.csv."),
             FConsoleCommandDelegate::CreateLambda([this]{UE_LOG(LogPRTGI,Display,TEXT("%s"),*RuntimeGI->Dump());}),ECVF_Default));
+        ConsoleObjects.Add(Console.RegisterConsoleCommand(TEXT("PRTGI.Runtime.Surfels.Validate"),TEXT("Audit GPU Surfel ownership, transforms, grid membership and lookup against a CPU oracle; diagnostic readback only."),
+            FConsoleCommandDelegate::CreateLambda([this]{UE_LOG(LogPRTGI,Display,TEXT("%s"),*RuntimeGI->AuditSurfels());}),ECVF_Default));
         ConsoleObjects.Add(Console.RegisterConsoleCommand(TEXT("PRTGI.ImportVolumes"),
             TEXT("Create editable Volume Actors from the current legacy grid/profile, reusing caches read-only. Does not save the map or bake."),
             FConsoleCommandDelegate::CreateRaw(this, &FPRTGIModule::ImportVolumeActors), ECVF_Default));

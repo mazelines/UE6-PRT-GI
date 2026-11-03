@@ -14,6 +14,7 @@ This `ue6` branch forks [wuzhy66/UE5-PRT-GI](https://github.com/wuzhy66/UE5-PRT-
 
 | Area | Fork baseline | Changes in this UE6 branch |
 |---|---|---|
+| Runtime Surfel surface pool | No runtime instance-owned GPU pool or spatial index | Added shared local seeds, per-instance GPU slots, move/duplicate/delete updates and a multilevel spatial hash. Opt-in; not yet a lighting cache. Audited 18,312 Showcase samples and passed all 18 PRTGI tests. [Details and limits](docs/runtime-gi-pc.md) |
 | Runtime resolve | No runtime layout-change path | Added any-hit BVH visibility and optional half-resolution irradiance with depth/normal/volume checks and full-resolution fallback. Close views improved but the wide view regressed, so half resolution remains disabled by default. [Measurements](docs/runtime-gi-pc.md) |
 | UE6 integration | UE 5.8 plugin with numeric GI mode selection | Added UE6 host project/targets and engine-enum mode selection; fixed PRT failing to activate after precomputation in UE6 |
 | Secondary surface lookup | Spatial search for nearby captured Surfel clusters at ray hits | Bound captured samples and transport sources to triangles; separated geometric/shading normals and added numerical ray-origin offsets to reduce incorrect associations and self-intersections |

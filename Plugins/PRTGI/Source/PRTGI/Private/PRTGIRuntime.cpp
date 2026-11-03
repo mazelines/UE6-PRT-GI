@@ -1,4 +1,5 @@
 #include "PRTGIRuntime.h"
+#include "PRTGIRuntimeSurfel.h"
 #include "PRTGIMultiBounce.h"
 #include "PRTGIMaterialAtlas.h"
 #include "PRTProbeVolume.h"
@@ -19,6 +20,8 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
+#include "UObject/ObjectKey.h"
+#include "Elements/SMInstance/SMInstanceElementId.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPRTRuntime,Log,All);
 namespace PRTGI
@@ -29,6 +32,8 @@ TAutoConsoleVariable<int32> Enable(TEXT("r.PRTGI.Runtime"),0,TEXT("Experimental 
 TAutoConsoleVariable<int32> Rays(TEXT("r.PRTGI.Runtime.Rays"),256,TEXT("Deterministic rays per probe, 64..1024. Reference quality, not a frame-time guarantee."));
 TAutoConsoleVariable<int32> Bounces(TEXT("r.PRTGI.Runtime.Bounces"),6,TEXT("Maximum runtime diffuse path bounces, 1..12."));
 TAutoConsoleVariable<int32> Budget(TEXT("r.PRTGI.Runtime.ProbesPerBatch"),32,TEXT("1..256 probes per GPU batch; at most one batch in flight."));
+TAutoConsoleVariable<int32> SurfelPoolEnabled(TEXT("r.PRTGI.Runtime.SurfelPool"),0,TEXT("Stage-one GPU surface pool and spatial index alongside the reference lighting; does not replace GI."));
+TAutoConsoleVariable<float> SeedSpacing(TEXT("r.PRTGI.Runtime.SurfelSeedSpacingCm"),50.f,TEXT("Asset-local triangle subdivision edge target in cm; run Runtime.Prepare after changing. Instance scale changes world density."));
 struct FHash
 {
     uint32 Value=0;
@@ -42,12 +47,25 @@ struct FAssetTriangle
     FVector3f Rho[64],Normal[64];
     bool Shadow=true;
 };
-struct FAsset { TArray<FAssetTriangle> Triangles; };
+struct FAsset
+{
+    TArray<FAssetTriangle> Triangles;
+    TSharedPtr<FRuntimeSurfelAsset,ESPMode::ThreadSafe> Surfels;
+    FString SurfelError;
+};
 struct FInstance
 {
     UStaticMeshComponent* Component=nullptr;
     FString Key;
     FTransform Transform;
+    FSMInstanceElementId Element;
+};
+struct FSurfelOwnerKey
+{
+    FObjectKey Component;
+    FSMInstanceElementId Element;
+    bool operator==(const FSurfelOwnerKey& R)const { return Component==R.Component && Element==R.Element; }
+    friend uint32 GetTypeHash(const FSurfelOwnerKey& K) { return HashCombine(GetTypeHash(K.Component),GetTypeHash(K.Element)); }
 };
 struct FWorldTriangle
 {
@@ -104,12 +122,54 @@ TArray<FInstance> Instances(UWorld* World)
             if(auto* ISM=Cast<UInstancedStaticMeshComponent>(C))
             {
                 for(int32 I=0;I<ISM->GetInstanceCount();++I)
-                { FTransform T;if(ISM->GetInstanceTransform(I,T,true))Result.Add({C,Key,T}); }
+                {
+                    FTransform T;if(ISM->GetInstanceTransform(I,T,true))
+                    {
+                        FSMInstanceElementId Id;
+                        if(SurfelPoolEnabled.GetValueOnGameThread()!=0)Id=FSMInstanceElementIdMap::Get().GetSMInstanceElementIdFromSMInstanceId({ISM,I});
+                        Result.Add({C,Key,T,Id});
+                    }
+                }
             }
-            else Result.Add({C,Key,C->GetComponentTransform()});
+            else Result.Add({C,Key,C->GetComponentTransform(),{}});
         }
     }
     return Result;
+}
+void PrepareSurfelSeeds(FAsset& Asset)
+{
+    auto Out=MakeShared<FRuntimeSurfelAsset,ESPMode::ThreadSafe>();
+    const float Spacing=FMath::Clamp(SeedSpacing.GetValueOnGameThread(),1.f,1000.f);
+    for(const auto& T:Asset.Triangles)
+    {
+        FVector3f GN=FVector3f::CrossProduct(T.P[1]-T.P[0],T.P[2]-T.P[0]).GetSafeNormal();
+        if(GN.IsNearlyZero())continue;
+        if(FVector3f::DotProduct(GN,T.N[0]+T.N[1]+T.N[2])<0)GN=-GN;
+        const float Edge=FMath::Max3((T.P[1]-T.P[0]).Size(),(T.P[2]-T.P[0]).Size(),(T.P[2]-T.P[1]).Size());
+        const int32 N=FMath::Max(1,FMath::CeilToInt(Edge/Spacing));
+        if(N>32 || Out->Num()+N*N>1048576)
+        { Asset.SurfelError=TEXT("Surfel seed budget exceeded; increase asset-local seed spacing and Prepare again");return; }
+        auto Position=[&](FVector2f UV){return T.P[0]*(1-UV.X-UV.Y)+T.P[1]*UV.X+T.P[2]*UV.Y;};
+        auto Add=[&](FVector2f A,FVector2f B,FVector2f C)
+        {
+            const FVector2f UV=(A+B+C)/3;const FVector3f Bary(1-UV.X-UV.Y,UV.X,UV.Y);
+            FVector3f Normal(0),TX(0),TY(0);
+            for(int32 K=0;K<3;++K){Normal+=T.N[K]*Bary[K];TX+=T.T[K]*Bary[K];TY+=T.B[K]*Bary[K];}
+            Normal=Normal.GetSafeNormal();TX=(TX-Normal*FVector3f::DotProduct(TX,Normal)).GetSafeNormal();
+            TY=FVector3f::CrossProduct(Normal,TX)*(FVector3f::DotProduct(FVector3f::CrossProduct(Normal,TX),TY)<0?-1.f:1.f);
+            const int32 Sample=FMath::Min(7,FMath::FloorToInt(UV.Y*8))*8+FMath::Min(7,FMath::FloorToInt(UV.X*8));
+            const auto NM=T.Normal[Sample];const auto Shading=(TX*NM.X+TY*NM.Y+Normal*NM.Z).GetSafeNormal();
+            const auto Center=(Position(A)+Position(B)+Position(C))/3;
+            Out->Seeds.Append({FVector4f(Center,0),FVector4f(Shading,0),FVector4f(Position(A)-Center,0),
+                FVector4f(Position(B)-Center,0),FVector4f(T.Rho[Sample],0),FVector4f(GN,0)});
+        };
+        for(int32 Y=0;Y<N;++Y)for(int32 X=0;X<N-Y;++X)
+        {
+            const FVector2f A(float(X)/N,float(Y)/N),B(float(X+1)/N,float(Y)/N),C(float(X)/N,float(Y+1)/N);
+            Add(A,B,C);if(X+Y<N-1)Add(B,FVector2f(float(X+1)/N,float(Y+1)/N),C);
+        }
+    }
+    Asset.Surfels=Out;
 }
 TSharedPtr<FAsset> PrepareAsset(UStaticMeshComponent* C,FString& Error)
 {
@@ -147,7 +207,7 @@ TSharedPtr<FAsset> PrepareAsset(UStaticMeshComponent* C,FString& Error)
             }
         }
     }
-    return Asset;
+    PrepareSurfelSeeds(*Asset);return Asset;
 #else
     Error=TEXT("PC editor reference requires editor-prepared material charts. Cooked asset serialization is not implemented.");return nullptr;
 #endif
@@ -243,6 +303,10 @@ struct FRuntimeGI::FState
     double NextScan=0,Started=0,LastSeconds=0,SnapshotMs=0;
     FString Error;
     bool Invalidated=true;
+    TUniquePtr<FRuntimeSurfelPool> Surfels;
+    TMap<FSurfelOwnerKey,uint32> SurfelOwners;
+    uint32 NextSurfelOwner=1;
+    FString SurfelError,LastSurfelAudit;
 };
 FRuntimeGI::FRuntimeGI():State(MakeUnique<FState>()){}
 FRuntimeGI::~FRuntimeGI()=default;
@@ -273,6 +337,16 @@ bool FRuntimeGI::Tick(UWorld* World)
 {
     auto& S=*State;
     if(S.World.Get()!=World) { Reset();State->World=World;return true; }
+    if(S.Surfels)
+    {
+        FString Audit;bool Passed=false;
+        if(S.Surfels->PollAudit(Audit,Passed))
+        {
+            S.LastSurfelAudit=Audit;UE_LOG(LogPRTRuntime,Display,TEXT("%s"),*Audit);
+            const FString Path=FPaths::ProjectSavedDir()/TEXT("PRTGIRuntime/surfel-audit.txt");
+            IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path),true);FFileHelper::SaveStringToFile(Audit,*Path);
+        }
+    }
     const double Now=FPlatformTime::Seconds();
     const bool Invalidated=S.Invalidated;S.Invalidated=false;
     TArray<FVector4f> Output;const bool Finished=S.GPU && S.GPU->Tick(Output);
@@ -285,6 +359,30 @@ bool FRuntimeGI::Tick(UWorld* World)
     { const bool Dirty=Invalidated || !S.Published.IsEmpty();S.Error=Error;S.GPU.Reset();S.Job.Reset();S.Published.Reset();S.Requested=0;
       SetVolumeStatus(World,TEXT("Runtime: ")+Error,S.Published,0);return Dirty; }
     const auto Items=Instances(World);const uint32 Current=Signature(Items,*Scene);
+    if(SurfelPoolEnabled.GetValueOnGameThread()!=0)
+    {
+        if(!S.Surfels)S.Surfels=MakeUnique<FRuntimeSurfelPool>();
+        TArray<FRuntimeSurfelInstance> SurfelItems;S.SurfelError.Reset();TSet<FSurfelOwnerKey> Seen;
+        for(const auto& I:Items)
+        {
+            if(I.Transform.GetScale3D().GetAbsMin()<1.e-6)continue;
+            const auto Asset=S.Assets.FindRef(I.Key);
+            if(!Asset || !Asset->Surfels)
+            { S.SurfelError=Asset?Asset->SurfelError:TEXT("Unprepared Surfel asset; run Runtime.Prepare");break; }
+            if(Cast<UInstancedStaticMeshComponent>(I.Component) && !I.Element)
+            { S.SurfelError=TEXT("ISM instance has no stable element identity");break; }
+            const FSurfelOwnerKey Key{FObjectKey(I.Component),I.Element};Seen.Add(Key);
+            uint32* Id=S.SurfelOwners.Find(Key);
+            if(!Id)Id=&S.SurfelOwners.Add(Key,S.NextSurfelOwner++);
+            SurfelItems.Add({*Id,Asset->Surfels,I.Transform});
+        }
+        if(S.SurfelError.IsEmpty())
+        {
+            S.Surfels->Update(SurfelItems,S.SurfelError);
+            for(auto It=S.SurfelOwners.CreateIterator();It;++It)if(!Seen.Contains(It.Key()))It.RemoveCurrent();
+        }
+    }
+    else if(S.Surfels){S.Surfels.Reset();S.SurfelOwners.Reset();S.NextSurfelOwner=1;S.SurfelError.Reset();}
     if(Current!=S.Requested || !S.Job)
     {
         const bool HadOutput=Invalidated || !S.Published.IsEmpty();S.Published.Reset();
@@ -352,8 +450,15 @@ bool FRuntimeGI::Tick(UWorld* World)
 FString FRuntimeGI::Status()const
 {
     const auto& S=*State;
-    return FString::Printf(TEXT("RuntimeReference=%d Assets=%d AssetBuilds=%d Instances=%d Triangles=%d Probes=%d Generation=%d Discarded=%d Pending=%d Published=%d ChartUpdates=%d SnapshotMs=%.3f ConvergenceSeconds=%.3f Error=%s"),
-        IsEnabled(),S.Assets.Num(),S.AssetBuilds,S.Instances,S.Triangles,S.Job?S.Job->Probes.Num():0,S.Generations,S.Discarded,S.GPU?1:0,S.Published.Num(),S.ChartUpdates,S.SnapshotMs,S.LastSeconds,*S.Error);
+    return FString::Printf(TEXT("RuntimeReference=%d Assets=%d AssetBuilds=%d Instances=%d Triangles=%d Probes=%d Generation=%d Discarded=%d Pending=%d Published=%d ChartUpdates=%d SnapshotMs=%.3f ConvergenceSeconds=%.3f Error=%s %s SurfelError=%s LastAudit=[%s]"),
+        IsEnabled(),S.Assets.Num(),S.AssetBuilds,S.Instances,S.Triangles,S.Job?S.Job->Probes.Num():0,S.Generations,S.Discarded,S.GPU?1:0,S.Published.Num(),S.ChartUpdates,S.SnapshotMs,S.LastSeconds,*S.Error,
+        S.Surfels?*S.Surfels->Status():TEXT("SurfelPool=disabled"),*S.SurfelError,*S.LastSurfelAudit);
+}
+FString FRuntimeGI::AuditSurfels()
+{
+    FString Error;
+    if(!State->Surfels)return TEXT("Enable r.PRTGI.Runtime.SurfelPool 1 and runtime GI first");
+    return State->Surfels->RequestAudit(Error)?TEXT("GPU Surfel audit queued; result appears in Runtime.Status and Saved/PRTGIRuntime/surfel-audit.txt"):Error;
 }
 FString FRuntimeGI::Dump()const
 {

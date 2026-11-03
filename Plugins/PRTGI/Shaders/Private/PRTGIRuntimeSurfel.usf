@@ -1,0 +1,137 @@
+#include "/Engine/Public/Platform.ush"
+StructuredBuffer<float4> Seeds;
+RWStructuredBuffer<float4> Pool;
+RWStructuredBuffer<uint4> CellKeys;
+RWStructuredBuffer<uint> Counts;
+RWStructuredBuffer<uint> Offsets;
+RWStructuredBuffer<uint> BlockSums;
+RWStructuredBuffer<uint> BlockOffsets;
+RWStructuredBuffer<uint> Cursors;
+RWStructuredBuffer<uint> Slots;
+StructuredBuffer<float4> Queries;
+RWStructuredBuffer<uint2> QueryResults;
+uint Capacity;
+uint BucketCount;
+uint SeedCount;
+uint SlotOffset;
+uint Owner;
+uint Revision;
+uint ClearCount;
+uint QueryCount;
+float BaseCellCm;
+float4 TransformX;
+float4 TransformY;
+float4 TransformZ;
+float4 NormalX;
+float4 NormalY;
+float4 NormalZ;
+
+float3 TransformSeed(float3 P,float W)
+{
+    return float3(dot(float4(P,W),TransformX),dot(float4(P,W),TransformY),dot(float4(P,W),TransformZ));
+}
+float3 TransformNormal(float3 N)
+{
+    return normalize(float3(dot(N,NormalX.xyz),dot(N,NormalY.xyz),dot(N,NormalZ.xyz)));
+}
+uint CellHash(int3 C,uint Level)
+{
+    uint H=asuint(C.x)*73856093u ^ asuint(C.y)*19349663u ^ asuint(C.z)*83492791u ^ Level*2654435761u;
+    H^=H>>16;return H&(BucketCount-1);
+}
+[numthreads(64,1,1)]
+void TransformCS(uint3 ID:SV_DispatchThreadID)
+{
+    uint I=ID.x;if(I>=SeedCount)return;
+    uint S=(SlotOffset+I)*4;
+    float3 A=TransformSeed(Seeds[I*6+2].xyz,0),B=TransformSeed(Seeds[I*6+3].xyz,0);
+    float Radius=max(length(A),max(length(B),length(A+B)));
+    Pool[S]=float4(TransformSeed(Seeds[I*6].xyz,1),Radius);
+    Pool[S+1]=float4(TransformNormal(Seeds[I*6+1].xyz),float(Owner));
+    Pool[S+2]=float4(Seeds[I*6+4].xyz,float(I));
+    Pool[S+3]=float4(TransformNormal(Seeds[I*6+5].xyz),float(Revision));
+}
+[numthreads(64,1,1)]
+void ClearSlotsCS(uint3 ID:SV_DispatchThreadID)
+{
+    if(ID.x>=ClearCount)return;
+    [unroll]for(uint C=0;C<4;++C)Pool[(SlotOffset+ID.x)*4+C]=0;
+}
+[numthreads(64,1,1)]
+void CountCS(uint3 ID:SV_DispatchThreadID)
+{
+    uint S=ID.x;if(S>=Capacity)return;
+    if(Pool[S*4+1].w==0)return;
+    float4 P=Pool[S*4];
+    uint Level=(uint)max(0,ceil(log2(max(1,2*P.w/BaseCellCm))));
+    float Width=BaseCellCm*float(1u<<Level);
+    int3 Cell=int3(floor(P.xyz/Width));
+    CellKeys[S]=uint4(asuint(Cell),Level);
+    uint Unused;InterlockedAdd(Counts[CellHash(Cell,Level)],1,Unused);
+}
+groupshared uint Scan[256];
+[numthreads(256,1,1)]
+void ScanCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
+{
+    uint I=Group.x*256+Lane;
+    Scan[Lane]=I<BucketCount?Counts[I]:0;
+    GroupMemoryBarrierWithGroupSync();
+    [unroll]for(uint Step=1;Step<256;Step*=2)
+    {
+        uint V=0;[branch]if(Lane>=Step)V=Scan[Lane-Step];
+        GroupMemoryBarrierWithGroupSync();Scan[Lane]+=V;GroupMemoryBarrierWithGroupSync();
+    }
+    if(I<BucketCount)Offsets[I]=Scan[Lane]-Counts[I];
+    if(Lane==255)BlockSums[Group.x]=Scan[Lane];
+}
+[numthreads(256,1,1)]
+void ScanBlocksCS(uint Lane:SV_GroupIndex)
+{
+    uint Blocks=(BucketCount+255)/256;
+    Scan[Lane]=Lane<Blocks?BlockSums[Lane]:0;
+    GroupMemoryBarrierWithGroupSync();
+    [unroll]for(uint Step=1;Step<256;Step*=2)
+    {
+        uint V=0;[branch]if(Lane>=Step)V=Scan[Lane-Step];
+        GroupMemoryBarrierWithGroupSync();Scan[Lane]+=V;GroupMemoryBarrierWithGroupSync();
+    }
+    if(Lane<Blocks)BlockOffsets[Lane]=Scan[Lane]-BlockSums[Lane];
+    if(Lane==255)Offsets[BucketCount]=Scan[Lane];
+}
+[numthreads(256,1,1)]
+void AddBlocksCS(uint3 ID:SV_DispatchThreadID)
+{
+    if(ID.x<BucketCount){Offsets[ID.x]+=BlockOffsets[ID.x/256];Cursors[ID.x]=0;}
+}
+[numthreads(64,1,1)]
+void ScatterCS(uint3 ID:SV_DispatchThreadID)
+{
+    uint S=ID.x;if(S>=Capacity)return;
+    if(Pool[S*4+1].w==0)return;
+    uint4 K=CellKeys[S];uint H=CellHash(asint(K.xyz),K.w),I;
+    InterlockedAdd(Cursors[H],1,I);Slots[Offsets[H]+I]=S;
+}
+[numthreads(64,1,1)]
+void QueryCS(uint3 ID:SV_DispatchThreadID)
+{
+    if(ID.x>=QueryCount)return;
+    float3 P=Queries[ID.x].xyz;uint Count=0,Checksum=0;
+    // Radius <= half the level's cell width: only 27 neighbour cells can
+    // contain an overlapping surfel centre. Exact keys reject hash collisions.
+    [loop]for(uint Level=0;Level<16;++Level)
+    {
+        int3 Base=int3(floor(P/(BaseCellCm*float(1u<<Level))));
+        [loop]for(int Z=-1;Z<=1;++Z)[loop]for(int Y=-1;Y<=1;++Y)[loop]for(int X=-1;X<=1;++X)
+        {
+            int3 Cell=Base+int3(X,Y,Z);uint H=CellHash(Cell,Level);
+            [loop]for(uint I=Offsets[H];I<Offsets[H+1];++I)
+            {
+                uint S=Slots[I];uint4 K=CellKeys[S];
+                if(K.w!=Level || any(asint(K.xyz)!=Cell))continue;
+                float4 Surfel=Pool[S*4];
+                if(distance(P,Surfel.xyz)<=Surfel.w){++Count;Checksum^=S+1;}
+            }
+        }
+    }
+    QueryResults[ID.x]=uint2(Count,Checksum);
+}
