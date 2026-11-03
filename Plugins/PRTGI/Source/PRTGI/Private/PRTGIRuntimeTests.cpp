@@ -89,6 +89,7 @@ public:
     }
     bool Update()override
     {
+        const int32 Case=Stage==14?1:Stage%7;
         if(!GPU)
         {
             auto Scene=MakeShared<PRTGI::FRuntimeScene,ESPMode::ThreadSafe>();
@@ -100,12 +101,14 @@ public:
             for(int32 I=0;I<128;++I){Scene->Materials.Add(FVector4f(.5f,.5f,.5f,0));Scene->Materials.Add(FVector4f(0,0,1,0));}
             Scene->SurfelBindings={FVector4f(0,1,1,1),FVector4f(0,1,1,1)};
             Scene->SurfelSnapshot=Snapshot;Scene->ReadCacheForTest=true;
-            Iterations=Stage==0?1:((Stage<3 || Stage>=5)?2:8);Alpha=Stage==3?.5f:1.f;
-            Scene->CacheIterations=Iterations;Scene->CacheRelaxation=Alpha;Scene->CacheBatch=Stage==2?256:1;
-            Scene->CacheBatchesPerSubmit=Stage==5?2:(Stage==6?8:1);
+            Iterations=Case==0?1:((Case<3 || Case>=5)?2:8);Alpha=Case==3?.5f:1.f;
+            Scene->CacheIterations=Iterations;Scene->CacheRelaxation=Alpha;Scene->CacheBatch=Case==2?256:1;
+            Scene->CacheBatchesPerSubmit=Case==5?2:(Case==6?8:1);
+            Scene->ReuseTransport=Stage>=7;
+            if(Stage==14)Scene->TransportBudgetBytes=0;
             Scene->CacheRays=64;Scene->Rays=1024;Scene->Probes={FVector4f(0,0,1,1)};
-            Scene->AnalyticEnvironment=Stage==4?FVector3f(0):FVector3f(2,3,5);
-            if(Stage!=4)Scene->Lights={FVector4f(0,0,1,0),FVector4f(2*UE_PI,2*UE_PI,2*UE_PI,0)};
+            Scene->AnalyticEnvironment=Case==4?FVector3f(0):FVector3f(2,3,5);
+            if(Case!=4)Scene->Lights={FVector4f(0,0,1,0),FVector4f(2*UE_PI,2*UE_PI,2*UE_PI,0)};
             GPU=MakeUnique<PRTGI::FRuntimeGPU>();GPU->Submit(Scene,1);Started=FPlatformTime::Seconds();
         }
         TArray<FVector4f> SH;
@@ -123,9 +126,9 @@ public:
         const float Q=1-Alpha,Power=FMath::Pow(Q,float(Iterations));
         for(int32 C=0;C<3;++C)
         {
-            const float L=Stage==4?0:FVector3f(2,3,5)[C];
+            const float L=Case==4?0:FVector3f(2,3,5)[C];
             const float Floor=UE_PI*L*(1-Power);
-            const float Direct=Stage==4?0:UE_PI;
+            const float Direct=Case==4?0:UE_PI;
             const float Receiver=Direct*(1-Power)+.5f*UE_PI*L*(1-Power-Iterations*Alpha*FMath::Pow(Q,float(Iterations-1)));
             Test->TestTrue(FString::Printf(TEXT("Stage %d E=pi L channel %d actual %g expected %g"),Stage,C,Cache[0][C],Floor),FMath::IsNearlyEqual(Cache[0][C],Floor,.0001f));
             for(int32 I=1;I<3;++I)Test->TestTrue(FString::Printf(TEXT("Stage %d Jacobi receiver %d channel %d actual %g expected %g"),Stage,I,C,Cache[I][C],Receiver),FMath::IsNearlyEqual(Cache[I][C],Receiver,.0002f));
@@ -134,9 +137,17 @@ public:
             Test->TestTrue(TEXT("Cache probe projection applies rho/pi exactly once"),FMath::IsNearlyEqual(SH[0][C],Expected,.004f));
         }
         for(int32 I=3;I<Cache.Num();++I)Test->TestTrue(TEXT("Inactive slots stay zero"),Cache[I]==FVector4f(0,0,0,0));
-        if(Stage==1)Previous=Cache;
-        if(Stage==2 || Stage>=5)Test->TestTrue(TEXT("Jacobi results independent of batch/submission boundaries"),Cache==Previous);
-        GPU.Reset();++Stage;return Stage==7;
+        if(Case==1)Previous=Cache;
+        if(Case==2 || Case>=5)Test->TestTrue(TEXT("Jacobi results independent of batch/submission boundaries"),Cache==Previous);
+        if(Stage<7){ExpectedCache.Add(Cache);ExpectedSH.Add(SH);}
+        else
+        {
+            Test->TestTrue(TEXT("Transport reuse preserves analytic cache exactly"),Cache==ExpectedCache[Case]);
+            Test->TestTrue(TEXT("Transport reuse preserves analytic probe SH exactly"),SH==ExpectedSH[Case]);
+        }
+        const bool ExpectedReuse=Stage>=7 && Case!=0 && Stage!=14;
+        Test->TestTrue(TEXT("Single-sweep and budget fallback selection"),GPU->Progress().Contains(ExpectedReuse?TEXT("TransportReuse=1"):TEXT("TransportReuse=0")));
+        GPU.Reset();++Stage;return Stage==15;
     }
 private:
     FAutomationTestBase* Test;
@@ -144,6 +155,7 @@ private:
     TSharedPtr<PRTGI::FRuntimeSurfelSnapshot,ESPMode::ThreadSafe> Snapshot;
     TUniquePtr<PRTGI::FRuntimeGPU> GPU;
     TArray<FVector4f> Previous;
+    TArray<TArray<FVector4f>> ExpectedCache,ExpectedSH;
     int32 Stage=0,Iterations=0,Ticks=0;float Alpha=1;double Started=0;
 };
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPRTCacheAnalytic,"PRTGI.Runtime.SurfelCacheAnalytic",

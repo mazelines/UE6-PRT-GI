@@ -22,6 +22,8 @@ uint CacheActiveCount;
 uint CacheRayCount;
 uint CacheIteration;
 float CacheRelaxation;
+RWStructuredBuffer<float4> TransportQueries;
+uint ReuseTransport;
 float3 AnalyticEnvironment;
 
 bool BoxHit(float3 O, float3 D, float3 Min, float3 Max, float Limit)
@@ -184,12 +186,36 @@ void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
     float3 Origin=P+Ng*Bias,Sum=0;
     [loop]for(uint Ray=Lane;Ray<CacheRayCount;Ray+=64)
     {
+        // Dense active indices, not sparse surface slots. The immutable scene
+        // and deterministic samples make these geometric/light queries invariant
+        // across Jacobi sweeps. Irradiance is still gathered anew every sweep.
+        uint Query=(Active*CacheRayCount+Ray)*2;
+        if(ReuseTransport!=0 && CacheIteration>0)
+        {
+            float4 Record=TransportQueries[Query];int Hit=int(Record.w);
+            if(Hit<0){Sum+=Record.rgb;continue;}
+            float2 Bary=TransportQueries[Query+1].xy;
+            uint Sample=(uint)min(7,floor(Bary.y*8))*8+(uint)min(7,floor(Bary.x*8));
+            Sum+=Materials[Hit*128+Sample*2].xyz*(Record.rgb+CachedIrradiance(Hit,Bary));
+            continue;
+        }
+        if(ReuseTransport!=0)
+        {
+            // Rejected directions/backfaces and misses must also overwrite rows.
+            TransportQueries[Query]=float4(0,0,0,-1);
+            TransportQueries[Query+1]=0;
+        }
         // Fixed samples define a deterministic transport operator. Relaxation
         // damps the iteration, not stochastic frame-to-frame noise.
         uint Seed=Hash(Slot*8191+Ray+1);float3 D=CosineDirection(N,Seed);
         if(dot(D,Ng)<=0)continue;
         float Distance=6400;float2 Bary;int Hit=Trace(Origin,D,Distance,Bary,false);
-        if(Hit<0){Sum+=3.14159265359*AnalyticEnvironment;continue;}
+        if(Hit<0)
+        {
+            float3 Environment=3.14159265359*AnalyticEnvironment;
+            if(ReuseTransport!=0)TransportQueries[Query]=float4(Environment,-1);
+            Sum+=Environment;continue;
+        }
         uint Sample=(uint)min(7,floor(Bary.y*8))*8+(uint)min(7,floor(Bary.x*8));
         float3 Rho=Materials[Hit*128+Sample*2].xyz,HN=Materials[Hit*128+Sample*2+1].xyz;
         float3 HNg=normalize(cross(Triangles[Hit*3+1].xyz,Triangles[Hit*3+2].xyz));
@@ -198,7 +224,13 @@ void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
         float3 HP=Origin+D*Distance;
         float HBias=max(.02,4*1.1920929e-7*max(max(abs(HP.x),abs(HP.y)),abs(HP.z)));
         // pi from cosine-PDF integration cancels the hit's Lambert 1/pi.
-        Sum+=Rho*(DirectAt(HP+HNg*HBias,HN,HNg,HBias)+CachedIrradiance(Hit,Bary));
+        float3 Direct=DirectAt(HP+HNg*HBias,HN,HNg,HBias);
+        if(ReuseTransport!=0)
+        {
+            TransportQueries[Query]=float4(Direct,float(Hit));
+            TransportQueries[Query+1]=float4(Bary,0,0);
+        }
+        Sum+=Rho*(Direct+CachedIrradiance(Hit,Bary));
     }
     Reduction[Lane*9]=Sum;GroupMemoryBarrierWithGroupSync();
     [unroll]for(uint Step=32;Step>0;Step>>=1)

@@ -38,6 +38,8 @@ class FPRTRuntimeCS : public FGlobalShader
         SHADER_PARAMETER(uint32,CacheRayCount)
         SHADER_PARAMETER(uint32,CacheIteration)
         SHADER_PARAMETER(float,CacheRelaxation)
+        SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,TransportQueries)
+        SHADER_PARAMETER(uint32,ReuseTransport)
         SHADER_PARAMETER(FVector3f,AnalyticEnvironment)
     END_SHADER_PARAMETER_STRUCT()
 };
@@ -57,6 +59,9 @@ struct FRuntimeGPU::FState
     TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Scene;
     TRefCountPtr<FRDGPooledBuffer> Triangles,Nodes,Materials,Lights,Probes,SH;
     TRefCountPtr<FRDGPooledBuffer> Bindings,Active,Irradiance[2];
+    TRefCountPtr<FRDGPooledBuffer> TransportQueries;
+    uint64 TransportBytes=0;
+    bool ReuseTransport=false,ScratchReleased=false;
     TUniquePtr<FRHIGPUBufferReadback> Readback,CacheReadback;
     FGPUFenceRHIRef Fence;
     int32 SubmittedSurfels=0,Submissions=0;
@@ -77,22 +82,27 @@ FRuntimeGPU::~FRuntimeGPU()
         S->Fence.SafeRelease();S->Readback.Reset();S->CacheReadback.Reset();S->Triangles.SafeRelease();S->Nodes.SafeRelease();
         S->Bindings.SafeRelease();S->Active.SafeRelease();S->Irradiance[0].SafeRelease();S->Irradiance[1].SafeRelease();
         S->Materials.SafeRelease();S->Lights.SafeRelease();S->Probes.SafeRelease();S->SH.SafeRelease();
+        S->TransportQueries.SafeRelease();
     });
 }
 void FRuntimeGPU::Submit(TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Scene,int32 InProbeBudget)
 {
     check(!State->Scene);State->Scene=Scene;State->Budget=FMath::Clamp(InProbeBudget,1,256);
     State->CachePhase=Scene->SurfelSnapshot && !Scene->SurfelSnapshot->ActiveSlots.IsEmpty();
+    const uint64 Bytes=State->CachePhase?uint64(Scene->SurfelSnapshot->ActiveSlots.Num())*Scene->CacheRays*32:0;
+    State->ReuseTransport=Scene->ReuseTransport && Scene->CacheIterations>1 && Bytes>0 && Bytes<=Scene->TransportBudgetBytes;
+    State->TransportBytes=State->ReuseTransport?Bytes:0;
 }
 const TArray<FVector4f>& FRuntimeGPU::CacheResultForTest()const { return State->CacheResult; }
 FString FRuntimeGPU::Progress()const
 {
     const auto& S=*State;
-    return FString::Printf(TEXT("CacheSweep=%d/%d CacheOffset=%d CachePhase=%d Submissions=%d"),S.Iteration,S.Scene?S.Scene->CacheIterations:0,S.CacheOffset,S.CachePhase,S.Submissions);
+    return FString::Printf(TEXT("CacheSweep=%d/%d CacheOffset=%d CachePhase=%d Submissions=%d TransportReuse=%d TransportBytes=%llu TransportRetained=%d"),S.Iteration,S.Scene?S.Scene->CacheIterations:0,S.CacheOffset,S.CachePhase,S.Submissions,S.ReuseTransport,S.TransportBytes,S.ReuseTransport && !S.ScratchReleased);
 }
 void FRuntimeGPU::RetainCacheAndReleaseScratch()
 {
     auto S=State;
+    S->ScratchReleased=true;
     ENQUEUE_RENDER_COMMAND(PRTRetainSolvedCache)([S](FRHICommandListImmediate&)
     {
         // Preserve the final irradiance and immutable surface snapshot until
@@ -100,6 +110,7 @@ void FRuntimeGPU::RetainCacheAndReleaseScratch()
         S->Triangles.SafeRelease();S->Nodes.SafeRelease();S->Materials.SafeRelease();
         S->Lights.SafeRelease();S->Probes.SafeRelease();S->SH.SafeRelease();
         S->Bindings.SafeRelease();S->Active.SafeRelease();S->Irradiance[1-S->Current].SafeRelease();
+        S->TransportQueries.SafeRelease();
     });
 }
 bool FRuntimeGPU::HasPendingSubmission() const { return State->Pending; }
@@ -182,6 +193,10 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
                 AddClearUAVPass(Graph,Graph.CreateUAV(B),0);S->Irradiance[I]=Graph.ConvertToExternalBuffer(B);
             }
             auto SH=Graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(16,Scene.Probes.Num()*9),TEXT("PRT.Runtime.SH"));
+            // Every active/ray row is initialized in sweep zero, including misses
+            // and rejected backfaces. No cross-generation data is reused.
+            S->TransportQueries=Graph.ConvertToExternalBuffer(Graph.CreateBuffer(
+                FRDGBufferDesc::CreateStructuredDesc(16,S->ReuseTransport?uint32(S->TransportBytes/16):1),TEXT("PRT.Cache.TransportQueries")));
             AddClearUAVPass(Graph,Graph.CreateUAV(SH),0);
             S->SH=Graph.ConvertToExternalBuffer(SH);
         }
@@ -204,6 +219,8 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
         P->CacheActiveCount=Scene.SurfelSnapshot?Scene.SurfelSnapshot->ActiveSlots.Num():0;
         P->CacheRayCount=Scene.CacheRays;P->CacheIteration=S->Iteration;P->CacheRelaxation=Scene.CacheRelaxation;
         P->AnalyticEnvironment=Scene.AnalyticEnvironment;
+        P->TransportQueries=Graph.CreateUAV(Graph.RegisterExternalBuffer(S->TransportQueries));
+        P->ReuseTransport=S->ReuseTransport;
         const bool Last=!S->CachePhase && S->Offset+S->Budget>=Scene.Probes.Num();
         if(S->CachePhase)
         {
@@ -214,7 +231,7 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
             {
                 auto* Batch=Graph.AllocParameters<FPRTCacheCS::FParameters>();*Batch=*P;
                 Batch->CacheOffset=S->CacheOffset+Done;
-                FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Surfel Irradiance Sweep"),Shader,Batch,
+                FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Surfel Irradiance Sweep Reuse=%d Build=%d",S->ReuseTransport,S->ReuseTransport && S->Iteration==0),Shader,Batch,
                     FIntVector(FMath::Min(Scene.CacheBatch,S->SubmittedSurfels-Done),1,1));
             }
         }

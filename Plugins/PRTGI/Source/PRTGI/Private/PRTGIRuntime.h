@@ -43,6 +43,8 @@ struct FRuntimeScene
     TArray<FVector4f> SurfelBindings; // sorted BVH triangle -> first slot, N, count, owner
     int32 CacheIterations=5,CacheRays=64,CacheBatch=256,CacheBatchesPerSubmit=8;
     float CacheRelaxation=1.f;
+    bool ReuseTransport=false;
+    uint64 TransportBudgetBytes=64ull*1024*1024;
     // Isolated analytic fixtures only; live scene input stays black.
     FVector3f AnalyticEnvironment=FVector3f::ZeroVector;
     bool ReadCacheForTest=false;

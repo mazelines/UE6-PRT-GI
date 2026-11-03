@@ -1,0 +1,231 @@
+{
+  "date": "2026-11-04",
+  "branch": "feat/runtime-surfel-gi",
+  "base_commit": "7174e1b",
+  "build": {
+    "success": true,
+    "module_suffix": 6172,
+    "configuration": "UE6 Win64 Development Editor DX12/SM6"
+  },
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "cpu": "Intel Core i9-14900KF",
+    "map": "/PRTGI/Maps/PRTGI_Showcase",
+    "instances": 53,
+    "triangles": 11400,
+    "surfels": 18312,
+    "probes": 512,
+    "probe_rays": 256,
+    "probe_batch": 32,
+    "cache_iterations": 5,
+    "cache_rays": 64,
+    "cache_batch": 256,
+    "cache_batches_per_submit": 8,
+    "cache_relaxation": 1
+  },
+  "defaults": {
+    "r.PRTGI.Runtime.ReuseTransport": 0,
+    "r.PRTGI.Runtime.TransportBudgetMB": 64
+  },
+  "algorithm": "First-sweep float32 hit index, barycentrics and direct irradiance per deterministic ray; later sweeps gather current previous-buffer irradiance at the recorded hit. No approximate coordinate packing or reuse across generations. Probe projection unchanged.",
+  "memory": {
+    "bytes_per_active_surfel_ray": 32,
+    "whole_scene_bytes": 37502976,
+    "whole_scene_mib": 35.765625,
+    "room_bytes": {
+      "ClassicBox": 5554176,
+      "ColorBox": 11403264,
+      "ShinyBox": 11231232
+    },
+    "budget_scope": "Per job/room, not global. If over budget or one sweep, use original tracing. Queued release after projection or cancellation; peak device memory was not measured."
+  },
+  "publication_latency": {
+    "seconds": {
+      "0": [
+        1.381,
+        1.423,
+        1.431
+      ],
+      "1": [
+        1.118,
+        1.146,
+        1.14
+      ]
+    },
+    "median_seconds": {
+      "0": 1.423,
+      "1": 1.14
+    },
+    "reduction_percent": 19.887561489810267,
+    "method": "Three interleaved pairs, mode order alternated; directional light 50000/100000. Same final SH for each pair. Generation start to publication includes CPU work and fence waits, not change detection or total frame time."
+  },
+  "gpu_pass_samples": {
+    "eight_dispatch_sum_ms": {
+      "0": [
+        2.909,
+        2.648,
+        2.384,
+        2.396
+      ],
+      "1": [
+        0.046,
+        0.05,
+        0.052,
+        0.05
+      ]
+    },
+    "first_sweep_with_query_writes_ms": [
+      2.383,
+      2.704,
+      2.414
+    ],
+    "method": "ProfileGPU; first table used 32 sweeps to extend capture window, otherwise same rays/batches. Query-build captures used 5 sweeps. Only frames with eight cache dispatches retained; no-work captures excluded. Different surface ranges sampled; not identical-ray microbenchmarks. Excludes projection, resolve, total frame time."
+  },
+  "validation": {
+    "byte_exact_pairs": [
+      [
+        "baseline",
+        "reuse"
+      ],
+      [
+        "baseline",
+        "fallback"
+      ],
+      [
+        "baseline",
+        "recovered"
+      ],
+      [
+        "moved_reuse",
+        "moved_full"
+      ],
+      [
+        "baseline",
+        "restored"
+      ],
+      [
+        "baseline",
+        "cancel_recovered"
+      ],
+      [
+        "rooms_moved_reuse",
+        "rooms_moved_full"
+      ],
+      [
+        "rooms_before_pie",
+        "rooms_pie"
+      ],
+      [
+        "timing_0_0",
+        "timing_0_1"
+      ],
+      [
+        "timing_1_0",
+        "timing_1_1"
+      ],
+      [
+        "timing_2_0",
+        "timing_2_1"
+      ]
+    ],
+    "baseline_matches_previous_commit": true,
+    "three_room_baseline_matches_previous_commit": true,
+    "classic_cube_40cm_move_leaves_other_two_rooms_generation_and_sh_unchanged": true,
+    "three_room_pie_matches_editor": true,
+    "over_budget_1mib_fallback_and_64mib_recovery": true,
+    "cancelled_generation_then_restoration_matches_baseline": true
+  },
+  "lifecycle_status": {
+    "reuse": {
+      "global": {
+        "Generation": "2",
+        "Discarded": "0",
+        "Pending": "0",
+        "Published": "1",
+        "TransportReuse": "1",
+        "TransportBytes": "37502976",
+        "TransportRetained": "0"
+      }
+    },
+    "fallback": {
+      "global": {
+        "Generation": "3",
+        "Discarded": "0",
+        "Pending": "0",
+        "Published": "1",
+        "TransportReuse": "0",
+        "TransportBytes": "0",
+        "TransportRetained": "0"
+      }
+    },
+    "recovered": {
+      "global": {
+        "Generation": "4",
+        "Discarded": "0",
+        "Pending": "0",
+        "Published": "1",
+        "TransportReuse": "1",
+        "TransportBytes": "37502976",
+        "TransportRetained": "0"
+      }
+    },
+    "cancel_pending": {
+      "global": {
+        "Generation": "28",
+        "Discarded": "12",
+        "Pending": "1",
+        "Published": "1",
+        "TransportReuse": "1",
+        "TransportBytes": "37502976",
+        "TransportRetained": "1"
+      }
+    },
+    "cancel_recovered": {
+      "global": {
+        "Generation": "29",
+        "Discarded": "13",
+        "Pending": "0",
+        "Published": "1",
+        "TransportReuse": "1",
+        "TransportBytes": "37502976",
+        "TransportRetained": "0"
+      }
+    }
+  },
+  "automation": {
+    "passed": 19,
+    "failed": 0,
+    "tests": [
+      "PRTGI.Capture.ConsoleScope",
+      "PRTGI.Integration.EditorPIECacheIdentity",
+      "PRTGI.Math.ConstantRadianceProducesPiIrradiance",
+      "PRTGI.Math.FibonacciProjectionRecoversSH3",
+      "PRTGI.MultiBounce.AdaptiveBudget",
+      "PRTGI.MultiBounce.AnalyticTwoPlanes",
+      "PRTGI.MultiBounce.MaterialChartIsolation",
+      "PRTGI.MultiBounce.SurfaceBindingAndThinOccluder",
+      "PRTGI.Runtime.AnalyticHemisphere",
+      "PRTGI.Runtime.SurfelCacheAnalytic",
+      "PRTGI.Runtime.SurfelInstanceIdentity",
+      "PRTGI.Runtime.SurfelPoolLifecycle",
+      "PRTGI.Settings.MapProfileIsolation",
+      "PRTGI.Surfel.CaptureAuditGrazing",
+      "PRTGI.Surfel.CubeAxialDepth",
+      "PRTGI.Surfel.PartialCaptureAudit",
+      "PRTGI.Surfel.RelightAndPersistence",
+      "PRTGI.Visibility.CapturedPlaneMapping",
+      "PRTGI.Visibility.NearClipSafety"
+    ],
+    "surfel_analytic_subcases": 15,
+    "coverage": "Original seven analytic cases, seven reuse variants, and zero-budget fallback. Includes E=pi L, Jacobi propagation, alpha 0.5, black reset, exact cache/SH comparison, single-sweep fallback, grouped dispatches, paused scheduling. CommonUI.Debug.CheckGameViewportClientValid temporarily disabled for PIE integration and restored."
+  },
+  "limitations": [
+    "Not room-local dirty-region propagation: edited room still rebuilds all transport and irradiance.",
+    "No sharing of query tables across generations or rooms, no warm start, no reduction in probe projection or submission count.",
+    "Existing Surfel spatial approximation and triangle-boundary quality unchanged.",
+    "PC opt-in only; mobile memory/bandwidth unvalidated."
+  ],
+  "saved_map_sha256_after_restore": "935067dbd544d53c3128cd744cadd5608d692989b6777ff9c90fc21888921197",
+  "workspace_note": "Existing modified map excluded from commit. Reloaded the latest saved map without saving temporary room membership/movement. No dirty map or content packages after restoration.",
+  "local_evidence": "Saved/PRTGIRuntime/transport (ignored CSVs/statuses/profile captures); Saved/Logs/PRTGIRuntimeTransport.log"
+}

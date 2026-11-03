@@ -42,6 +42,8 @@ TAutoConsoleVariable<float> CacheRelaxation(TEXT("r.PRTGI.Runtime.CacheRelaxatio
 TAutoConsoleVariable<int32> CacheBatchesPerSubmit(TEXT("r.PRTGI.Runtime.CacheBatchesPerSubmit"),8,TEXT("1..32 cache dispatches per GPU submission, never crossing a Jacobi sweep. Fixed work count, not ms."));
 TAutoConsoleVariable<int32> KeepLighting(TEXT("r.PRTGI.Runtime.KeepLightingWhileUpdating"),1,TEXT("Keep published cache lighting while geometry/probe layout is unchanged. Geometry edits still clear old GI."));
 TAutoConsoleVariable<int32> RoomsEnabled(TEXT("r.PRTGI.Runtime.Rooms"),0,TEXT("Opt-in independent room jobs. Each enabled volume requires explicit Runtime Included Actors or Participant Tags. Shared lights affect all rooms."));
+TAutoConsoleVariable<int32> ReuseTransport(TEXT("r.PRTGI.Runtime.ReuseTransport"),0,TEXT("Cache ray hits and direct irradiance within one immutable lighting generation. Retrace after geometry/light changes. Experimental PC memory/performance tradeoff."));
+TAutoConsoleVariable<int32> TransportBudgetMB(TEXT("r.PRTGI.Runtime.TransportBudgetMB"),64,TEXT("0..512 MiB per room/job for transport queries; 32 bytes per active surfel and cache ray. Over-budget jobs use the original tracing path. Released after projection."));
 bool NeedsSurfelPool() { return SurfelPoolEnabled.GetValueOnGameThread()!=0 || UseSurfelCache.GetValueOnGameThread()!=0; }
 struct FHash
 {
@@ -287,7 +289,8 @@ uint32 Signature(const TArray<FInstance>& Items,const FRuntimeScene& Scene,uint3
     GeometrySignature=H.Value;
     for(const auto& L:Scene.Lights)H.Add(L);
     H.Add(Scene.Rays);H.Add(Scene.Bounces);H.Add(UseSurfelCache.GetValueOnGameThread());
-    H.Add(Scene.CacheIterations);H.Add(Scene.CacheRays);H.Add(Scene.CacheBatch);H.Add(Scene.CacheRelaxation);H.Add(Scene.CacheBatchesPerSubmit);H.Add(KeepLighting.GetValueOnGameThread());return H.Value;
+    H.Add(Scene.CacheIterations);H.Add(Scene.CacheRays);H.Add(Scene.CacheBatch);H.Add(Scene.CacheRelaxation);H.Add(Scene.CacheBatchesPerSubmit);H.Add(KeepLighting.GetValueOnGameThread());
+    H.Add(Scene.ReuseTransport);H.Add(Scene.TransportBudgetBytes);return H.Value;
 }
 void SetVolumeStatus(UWorld* World,const FString& Message,const TArray<FPRTGIRenderVolume>& Published,int32 BounceCount,const APRTProbeVolume* Room)
 {
@@ -436,6 +439,8 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
     Scene->CacheBatch=FMath::Clamp(CacheBatch.GetValueOnGameThread(),32,1024);
     Scene->CacheBatchesPerSubmit=FMath::Clamp(CacheBatchesPerSubmit.GetValueOnGameThread(),1,32);
     Scene->CacheRelaxation=FMath::Clamp(CacheRelaxation.GetValueOnGameThread(),.1f,1.f);
+    Scene->ReuseTransport=ReuseTransport.GetValueOnGameThread()!=0;
+    Scene->TransportBudgetBytes=uint64(FMath::Clamp(TransportBudgetMB.GetValueOnGameThread(),0,512))*1024*1024;
     FString Error;
     if(!ReadVolumes(World,*Scene,Error,Room))
     { const bool Dirty=Invalidated || !S.Published.IsEmpty();S.Error=Error;S.GPU.Reset();S.SolvedCache.Reset();S.Job.Reset();S.Published.Reset();S.HoldingLighting=false;S.Requested=0;
@@ -581,7 +586,7 @@ FString FRuntimeGI::Status()const
     }
     return FString::Printf(TEXT("RuntimeReference=%d Assets=%d AssetBuilds=%d Instances=%d Triangles=%d Probes=%d Generation=%d Discarded=%d Pending=%d Published=%d ChartUpdates=%d SnapshotMs=%.3f ConvergenceSeconds=%.3f Error=%s %s SurfelError=%s LastAudit=[%s] SurfelCache=%d CacheIterations=%d CacheRays=%d CacheRelaxation=%.3f CacheRetained=%d HoldingLighting=%d CacheBatchesPerSubmit=%d %s"),
         IsEnabled(),S.Assets.Num(),S.AssetBuilds,S.Instances,S.Triangles,S.Job?S.Job->Probes.Num():0,S.Generations,S.Discarded,S.GPU?1:0,S.Published.Num(),S.ChartUpdates,S.SnapshotMs,S.LastSeconds,*S.Error,
-        S.Surfels?*S.Surfels->Status():TEXT("SurfelPool=disabled"),*S.SurfelError,*S.LastSurfelAudit,UseSurfelCache.GetValueOnGameThread(),CacheIterations.GetValueOnGameThread(),CacheRays.GetValueOnGameThread(),CacheRelaxation.GetValueOnGameThread(),S.SolvedCache?1:0,S.HoldingLighting?1:0,CacheBatchesPerSubmit.GetValueOnGameThread(),S.GPU?*S.GPU->Progress():TEXT(""));
+        S.Surfels?*S.Surfels->Status():TEXT("SurfelPool=disabled"),*S.SurfelError,*S.LastSurfelAudit,UseSurfelCache.GetValueOnGameThread(),CacheIterations.GetValueOnGameThread(),CacheRays.GetValueOnGameThread(),CacheRelaxation.GetValueOnGameThread(),S.SolvedCache?1:0,S.HoldingLighting?1:0,CacheBatchesPerSubmit.GetValueOnGameThread(),S.GPU?*S.GPU->Progress():(S.SolvedCache?*S.SolvedCache->Progress():TEXT("")));
 }
 FString FRuntimeGI::AuditSurfels()
 {
