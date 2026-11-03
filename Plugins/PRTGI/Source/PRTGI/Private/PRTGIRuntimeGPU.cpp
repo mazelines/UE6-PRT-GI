@@ -1,4 +1,5 @@
 #include "PRTGIRuntime.h"
+#include "PRTGIRuntimeSurfel.h"
 #include "PRTGIMultiBounce.h"
 #include "GlobalShader.h"
 #include "RenderGraphBuilder.h"
@@ -26,8 +27,27 @@ class FPRTRuntimeCS : public FGlobalShader
         SHADER_PARAMETER(uint32,ProbeCount)
         SHADER_PARAMETER(uint32,RayCount)
         SHADER_PARAMETER(uint32,BounceCount)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,SurfacePool)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint>,ActiveSlots)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,SurfelBindings)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,PreviousIrradiance)
+        SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,NextIrradiance)
+        SHADER_PARAMETER(uint32,CacheEnabled)
+        SHADER_PARAMETER(uint32,CacheOffset)
+        SHADER_PARAMETER(uint32,CacheActiveCount)
+        SHADER_PARAMETER(uint32,CacheRayCount)
+        SHADER_PARAMETER(uint32,CacheIteration)
+        SHADER_PARAMETER(float,CacheRelaxation)
+        SHADER_PARAMETER(FVector3f,AnalyticEnvironment)
     END_SHADER_PARAMETER_STRUCT()
 };
+class FPRTCacheCS : public FGlobalShader
+{
+    DECLARE_GLOBAL_SHADER(FPRTCacheCS);
+    SHADER_USE_PARAMETER_STRUCT(FPRTCacheCS,FGlobalShader);
+    using FParameters=FPRTRuntimeCS::FParameters;
+};
+IMPLEMENT_GLOBAL_SHADER(FPRTCacheCS,"/Plugin/PRTGI/Private/PRTGIRuntime.usf","CacheCS",SF_Compute);
 IMPLEMENT_GLOBAL_SHADER(FPRTRuntimeCS,"/Plugin/PRTGI/Private/PRTGIRuntime.usf","RuntimeCS",SF_Compute);
 }
 namespace PRTGI
@@ -36,7 +56,11 @@ struct FRuntimeGPU::FState
 {
     TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Scene;
     TRefCountPtr<FRDGPooledBuffer> Triangles,Nodes,Materials,Lights,Probes,SH;
-    TUniquePtr<FRHIGPUBufferReadback> Readback;
+    TRefCountPtr<FRDGPooledBuffer> Bindings,Active,Irradiance[2];
+    TUniquePtr<FRHIGPUBufferReadback> Readback,CacheReadback;
+    TArray<FVector4f> CacheResult;
+    int32 CacheOffset=0,Iteration=0,Current=0;
+    bool CachePhase=false;
     TAtomic<bool> Ready{false},PollQueued{false};
     TArray<FVector4f> Result;
     int32 Offset=0,Budget=32;
@@ -48,13 +72,33 @@ FRuntimeGPU::~FRuntimeGPU()
     auto S=MoveTemp(State);
     ENQUEUE_RENDER_COMMAND(PRTReleaseRuntime)([S](FRHICommandListImmediate&)
     {
-        S->Readback.Reset();S->Triangles.SafeRelease();S->Nodes.SafeRelease();
+        S->Readback.Reset();S->CacheReadback.Reset();S->Triangles.SafeRelease();S->Nodes.SafeRelease();
+        S->Bindings.SafeRelease();S->Active.SafeRelease();S->Irradiance[0].SafeRelease();S->Irradiance[1].SafeRelease();
         S->Materials.SafeRelease();S->Lights.SafeRelease();S->Probes.SafeRelease();S->SH.SafeRelease();
     });
 }
 void FRuntimeGPU::Submit(TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Scene,int32 InProbeBudget)
 {
     check(!State->Scene);State->Scene=Scene;State->Budget=FMath::Clamp(InProbeBudget,1,256);
+    State->CachePhase=Scene->SurfelSnapshot && !Scene->SurfelSnapshot->ActiveSlots.IsEmpty();
+}
+const TArray<FVector4f>& FRuntimeGPU::CacheResultForTest()const { return State->CacheResult; }
+FString FRuntimeGPU::Progress()const
+{
+    const auto& S=*State;
+    return FString::Printf(TEXT("CacheSweep=%d/%d CacheOffset=%d CachePhase=%d"),S.Iteration,S.Scene?S.Scene->CacheIterations:0,S.CacheOffset,S.CachePhase);
+}
+void FRuntimeGPU::RetainCacheAndReleaseScratch()
+{
+    auto S=State;
+    ENQUEUE_RENDER_COMMAND(PRTRetainSolvedCache)([S](FRHICommandListImmediate&)
+    {
+        // Preserve the final irradiance and immutable surface snapshot until
+        // invalidation. Projection and solver inputs are no longer needed.
+        S->Triangles.SafeRelease();S->Nodes.SafeRelease();S->Materials.SafeRelease();
+        S->Lights.SafeRelease();S->Probes.SafeRelease();S->SH.SafeRelease();
+        S->Bindings.SafeRelease();S->Active.SafeRelease();S->Irradiance[1-S->Current].SafeRelease();
+    });
 }
 bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
 {
@@ -67,14 +111,21 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
             {
                 ENQUEUE_RENDER_COMMAND(PRTPollRuntime)([S](FRHICommandListImmediate&)
                 {
-                    if(S->Readback && S->Readback->IsReady())
+                    if(S->Readback && S->Readback->IsReady() && (!S->CacheReadback || S->CacheReadback->IsReady()))
                     {
-                        const bool Last=S->Offset+S->Budget>=S->Scene->Probes.Num();
+                        const bool Last=!S->CachePhase && S->Offset+S->Budget>=S->Scene->Probes.Num();
                         const uint32 Bytes=Last?S->Scene->Probes.Num()*9*16:16;
                         if(const void* Ptr=S->Readback->Lock(Bytes))
                         {
                             if(Last) { S->Result.SetNumUninitialized(S->Scene->Probes.Num()*9);FMemory::Memcpy(S->Result.GetData(),Ptr,Bytes); }
                             S->Readback->Unlock();
+                        }
+                        if(S->CacheReadback)
+                        {
+                            const uint32 Size=S->Scene->SurfelSnapshot->Capacity*16;
+                            if(const void* Ptr=S->CacheReadback->Lock(Size))
+                            { S->CacheResult.SetNumUninitialized(Size/16);FMemory::Memcpy(S->CacheResult.GetData(),Ptr,Size);S->CacheReadback->Unlock(); }
+                            S->CacheReadback.Reset();
                         }
                         S->Readback.Reset();S->Ready.Store(true);
                     }
@@ -83,8 +134,21 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
             }
             return false;
         }
-        S->Pending=false;S->Offset+=S->Budget;
-        if(S->Offset>=S->Scene->Probes.Num()) { Output=MoveTemp(S->Result);return true; }
+        S->Pending=false;
+        if(S->CachePhase)
+        {
+            S->CacheOffset+=S->Scene->CacheBatch;
+            if(S->CacheOffset>=S->Scene->SurfelSnapshot->ActiveSlots.Num())
+            {
+                S->CacheOffset=0;S->Current=1-S->Current;++S->Iteration;
+                if(S->Iteration>=S->Scene->CacheIterations)S->CachePhase=false;
+            }
+        }
+        else
+        {
+            S->Offset+=S->Budget;
+            if(S->Offset>=S->Scene->Probes.Num()) { Output=MoveTemp(S->Result);return true; }
+        }
     }
     S->Pending=true;S->Ready.Store(false);
     ENQUEUE_RENDER_COMMAND(PRTEvaluateRuntime)([S](FRHICommandListImmediate& RHICmdList)
@@ -102,6 +166,15 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
             Upload(TEXT("PRT.Runtime.Materials"),Scene.Materials,S->Materials);
             Upload(TEXT("PRT.Runtime.Lights"),Scene.Lights,S->Lights);
             Upload(TEXT("PRT.Runtime.Probes"),Scene.Probes,S->Probes);
+            Upload(TEXT("PRT.Cache.Bindings"),Scene.SurfelBindings,S->Bindings);
+            const TArray<uint32> EmptySlots{0};
+            S->Active=Graph.ConvertToExternalBuffer(CreateStructuredBuffer(Graph,TEXT("PRT.Cache.Active"),
+                Scene.SurfelSnapshot && !Scene.SurfelSnapshot->ActiveSlots.IsEmpty()?Scene.SurfelSnapshot->ActiveSlots:EmptySlots));
+            for(int32 I=0;I<2;++I)
+            {
+                auto B=Graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(16,Scene.SurfelSnapshot?Scene.SurfelSnapshot->Capacity:1),TEXT("PRT.Cache.Irradiance"));
+                AddClearUAVPass(Graph,Graph.CreateUAV(B),0);S->Irradiance[I]=Graph.ConvertToExternalBuffer(B);
+            }
             auto SH=Graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(16,Scene.Probes.Num()*9),TEXT("PRT.Runtime.SH"));
             AddClearUAVPass(Graph,Graph.CreateUAV(SH),0);
             S->SH=Graph.ConvertToExternalBuffer(SH);
@@ -115,13 +188,38 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output)
         auto SH=Graph.RegisterExternalBuffer(S->SH);P->OutSH=Graph.CreateUAV(SH);
         P->NodeCount=Scene.Geometry->Nodes.Num()/2;P->LightCount=Scene.Lights.Num()/2;
         P->ProbeOffset=S->Offset;P->ProbeCount=Scene.Probes.Num();P->RayCount=Scene.Rays;P->BounceCount=Scene.Bounces;
+        P->SurfacePool=Graph.CreateSRV(Graph.RegisterExternalBuffer(Scene.SurfelSnapshot?Scene.SurfelSnapshot->Buffer:S->Probes));
+        P->ActiveSlots=Graph.CreateSRV(Graph.RegisterExternalBuffer(S->Active));
+        P->SurfelBindings=Graph.CreateSRV(Graph.RegisterExternalBuffer(S->Bindings));
+        auto Previous=Graph.RegisterExternalBuffer(S->Irradiance[S->Current]);
+        auto Next=Graph.RegisterExternalBuffer(S->Irradiance[1-S->Current]);
+        P->PreviousIrradiance=Graph.CreateSRV(Previous);P->NextIrradiance=Graph.CreateUAV(Next);
+        P->CacheEnabled=Scene.SurfelSnapshot?1:0;P->CacheOffset=S->CacheOffset;
+        P->CacheActiveCount=Scene.SurfelSnapshot?Scene.SurfelSnapshot->ActiveSlots.Num():0;
+        P->CacheRayCount=Scene.CacheRays;P->CacheIteration=S->Iteration;P->CacheRelaxation=Scene.CacheRelaxation;
+        P->AnalyticEnvironment=Scene.AnalyticEnvironment;
+        const bool Last=!S->CachePhase && S->Offset+S->Budget>=Scene.Probes.Num();
+        if(S->CachePhase)
+        {
+            TShaderMapRef<FPRTCacheCS> Shader(GetGlobalShaderMap(GMaxRHIShaderPlatform));
+            FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Surfel Irradiance Sweep"),Shader,P,
+                FIntVector(FMath::Min(Scene.CacheBatch,int32(P->CacheActiveCount)-S->CacheOffset),1,1));
+        }
+        else
+        {
         TShaderMapRef<FPRTRuntimeCS> Shader(GetGlobalShaderMap(GMaxRHIShaderPlatform));
-        FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Runtime Reference Transport"),Shader,P,
+        FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Runtime Probe Transport Cache=%d",P->CacheEnabled),Shader,P,
             FIntVector(FMath::Min(S->Budget,Scene.Probes.Num()-S->Offset),1,1));
+        }
         S->Readback=MakeUnique<FRHIGPUBufferReadback>(TEXT("PRT.Runtime.Readback"));
         // A tiny readback also bounds queued GPU work to one batch. Only the
         // last batch reads all coefficients (reference validation / CPU resolve).
-        AddEnqueueCopyPass(Graph,S->Readback.Get(),SH,S->Offset+S->Budget>=Scene.Probes.Num()?Scene.Probes.Num()*9*16:16);
+        AddEnqueueCopyPass(Graph,S->Readback.Get(),S->CachePhase?Next:SH,Last?Scene.Probes.Num()*9*16:16);
+        if(Last && Scene.SurfelSnapshot && Scene.ReadCacheForTest)
+        {
+            S->CacheReadback=MakeUnique<FRHIGPUBufferReadback>(TEXT("PRT.Cache.TestReadback"));
+            AddEnqueueCopyPass(Graph,S->CacheReadback.Get(),Previous,Scene.SurfelSnapshot->Capacity*16);
+        }
         Graph.Execute();
     });
     return false;

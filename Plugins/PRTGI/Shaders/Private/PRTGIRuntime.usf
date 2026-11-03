@@ -11,6 +11,18 @@ uint ProbeOffset;
 uint ProbeCount;
 uint RayCount;
 uint BounceCount;
+StructuredBuffer<float4> SurfacePool;
+StructuredBuffer<uint> ActiveSlots;
+StructuredBuffer<float4> SurfelBindings;
+StructuredBuffer<float4> PreviousIrradiance;
+RWStructuredBuffer<float4> NextIrradiance;
+uint CacheEnabled;
+uint CacheOffset;
+uint CacheActiveCount;
+uint CacheRayCount;
+uint CacheIteration;
+float CacheRelaxation;
+float3 AnalyticEnvironment;
 
 bool BoxHit(float3 O, float3 D, float3 Min, float3 Max, float Limit)
 {
@@ -54,23 +66,9 @@ float3 CosineDirection(float3 N,inout uint Seed)
     float3 T=normalize(cross(abs(N.z)<.99?float3(0,0,1):float3(0,1,0),N)),B=cross(N,T);
     return sqrt(U)*(cos(A)*T+sin(A)*B)+sqrt(1-U)*N;
 }
-float3 Path(float3 O,float3 D,inout uint Seed,out float Backface)
+float3 DirectAt(float3 P,float3 N,float3 Ng,float Bias)
 {
-    float3 Sum=0,Throughput=1;Backface=0;
-    [loop] for(uint Bounce=0;Bounce<BounceCount;++Bounce)
-    {
-        float Distance=6400;float2 Bary;int Hit=Trace(O,D,Distance,Bary,false);if(Hit<0)break;
-        uint Sample=(uint)min(7,floor(Bary.y*8))*8+(uint)min(7,floor(Bary.x*8));
-        float3 Rho=Materials[Hit*128+Sample*2].xyz;
-        float3 N=Materials[Hit*128+Sample*2+1].xyz;
-        float3 Ng=normalize(cross(Triangles[Hit*3+1].xyz,Triangles[Hit*3+2].xyz));
-        // Winding may reverse under mirrored instance transforms. Authored
-        // shading normals determine the outward side of opaque surfaces.
-        if(dot(Ng,N)<0)Ng=-Ng;
-        if(dot(Ng,D)>=0) { if(Bounce==0)Backface=1;break; }
-        float3 P=O+D*Distance;float Bias=max(.02,4*1.1920929e-7*max(max(abs(P.x),abs(P.y)),abs(P.z)));
-        P+=Ng*Bias;
-        float3 Direct=0;
+    float3 Direct=0;
         [loop] for(uint L=0;L<LightCount;++L)
         {
             float4 Pos=Lights[L*2],Color=Lights[L*2+1];float3 ToLight=Pos.xyz;float Limit=1.e7,Attenuation=1;
@@ -90,6 +88,48 @@ float3 Path(float3 O,float3 D,inout uint Seed,out float Backface)
                 if(Trace(P,ToLight,ShadowDistance,Unused,true)<0) Direct+=Color.rgb*(Cos*Attenuation);
             }
         }
+    return Direct;
+}
+float3 CachedIrradiance(uint Hit,float2 Bary)
+{
+    float4 Binding=SurfelBindings[Hit];uint N=(uint)Binding.y;
+    if(N==0)return 0;
+    float2 UV=Bary*N;int2 Cell=int2(floor(UV));float3 Sum=0;float Weight=0;
+    // Compact smooth weights in the hit triangle's barycentric lattice.
+    // Exact triangle ownership avoids blending nearby walls or other instances.
+    [unroll]for(int Y=-1;Y<=1;++Y)[unroll]for(int X=-1;X<=1;++X)
+    {
+        int2 C=Cell+int2(X,Y);
+        if(any(C<0) || C.x+C.y>=int(N))continue;
+        [unroll]for(uint Upper=0;Upper<2;++Upper)
+        {
+            if(Upper!=0 && C.x+C.y>=int(N)-1)continue;
+            float2 Delta=UV-(float2(C)+(Upper!=0?2.0/3.0:1.0/3.0));
+            float W=saturate(1-dot(Delta,Delta));W*=W;
+            uint Local=C.y*(2*N-C.y)+2*C.x+Upper;
+            Sum+=PreviousIrradiance[(uint)Binding.x+Local].rgb*W;Weight+=W;
+        }
+    }
+    return Weight>1.e-8?Sum/Weight:0;
+}
+float3 Path(float3 O,float3 D,inout uint Seed,out float Backface)
+{
+    float3 Sum=0,Throughput=1;Backface=0;
+    [loop] for(uint Bounce=0;Bounce<BounceCount;++Bounce)
+    {
+        float Distance=6400;float2 Bary;int Hit=Trace(O,D,Distance,Bary,false);if(Hit<0)break;
+        uint Sample=(uint)min(7,floor(Bary.y*8))*8+(uint)min(7,floor(Bary.x*8));
+        float3 Rho=Materials[Hit*128+Sample*2].xyz;
+        float3 N=Materials[Hit*128+Sample*2+1].xyz;
+        float3 Ng=normalize(cross(Triangles[Hit*3+1].xyz,Triangles[Hit*3+2].xyz));
+        // Winding may reverse under mirrored instance transforms. Authored
+        // shading normals determine the outward side of opaque surfaces.
+        if(dot(Ng,N)<0)Ng=-Ng;
+        if(dot(Ng,D)>=0) { if(Bounce==0)Backface=1;break; }
+        float3 P=O+D*Distance;float Bias=max(.02,4*1.1920929e-7*max(max(abs(P.x),abs(P.y)),abs(P.z)));
+        P+=Ng*Bias;
+        float3 Direct=DirectAt(P,N,Ng,Bias);
+        if(CacheEnabled!=0)return Rho*(Direct+CachedIrradiance(Hit,Bary))/3.14159265359;
         Sum+=Throughput*Rho*(Direct/3.14159265359);
         Throughput*=Rho;
         if(Bounce>=3 && max(Throughput.r,max(Throughput.g,Throughput.b))<.01)break;
@@ -130,4 +170,41 @@ void RuntimeCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
         float Band=C==0?3.14159265359:(C<4?2.09439510239:.78539816339);
         OutSH[Probe*9+C]=float4(Reduction[C]*(12.56637061436*Band/RayCount),C==0?(Backfaces[0]>.25*RayCount?-1:1):0);
     }
+}
+
+// Jacobi sweep: all batches read the same previous buffer. Swap only after
+// the entire active set is complete; no in-place radiance propagation.
+[numthreads(64,1,1)]
+void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
+{
+    uint Active=CacheOffset+Group.x;if(Active>=CacheActiveCount)return;
+    uint Slot=ActiveSlots[Active];float3 P=SurfacePool[Slot*4].xyz;
+    float3 N=SurfacePool[Slot*4+1].xyz,Ng=SurfacePool[Slot*4+3].xyz;
+    float Bias=max(.02,4*1.1920929e-7*max(max(abs(P.x),abs(P.y)),abs(P.z)));
+    float3 Origin=P+Ng*Bias,Sum=0;
+    [loop]for(uint Ray=Lane;Ray<CacheRayCount;Ray+=64)
+    {
+        // Fixed samples define a deterministic transport operator. Relaxation
+        // damps the iteration, not stochastic frame-to-frame noise.
+        uint Seed=Hash(Slot*8191+Ray+1);float3 D=CosineDirection(N,Seed);
+        if(dot(D,Ng)<=0)continue;
+        float Distance=6400;float2 Bary;int Hit=Trace(Origin,D,Distance,Bary,false);
+        if(Hit<0){Sum+=3.14159265359*AnalyticEnvironment;continue;}
+        uint Sample=(uint)min(7,floor(Bary.y*8))*8+(uint)min(7,floor(Bary.x*8));
+        float3 Rho=Materials[Hit*128+Sample*2].xyz,HN=Materials[Hit*128+Sample*2+1].xyz;
+        float3 HNg=normalize(cross(Triangles[Hit*3+1].xyz,Triangles[Hit*3+2].xyz));
+        if(dot(HNg,HN)<0)HNg=-HNg;
+        if(dot(HNg,D)>=0)continue;
+        float3 HP=Origin+D*Distance;
+        float HBias=max(.02,4*1.1920929e-7*max(max(abs(HP.x),abs(HP.y)),abs(HP.z)));
+        // pi from cosine-PDF integration cancels the hit's Lambert 1/pi.
+        Sum+=Rho*(DirectAt(HP+HNg*HBias,HN,HNg,HBias)+CachedIrradiance(Hit,Bary));
+    }
+    Reduction[Lane*9]=Sum;GroupMemoryBarrierWithGroupSync();
+    [unroll]for(uint Step=32;Step>0;Step>>=1)
+    {
+        if(Lane<Step)Reduction[Lane*9]+=Reduction[(Lane+Step)*9];
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if(Lane==0)NextIrradiance[Slot]=float4(lerp(PreviousIrradiance[Slot].rgb,Reduction[0]/CacheRayCount,CacheRelaxation),CacheIteration+1);
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "CoreMinimal.h"
+#include "RenderGraphResources.h"
 
 namespace PRTGI
 {
@@ -8,6 +9,7 @@ namespace PRTGI
 struct FRuntimeSurfelAsset
 {
     TArray<FVector4f> Seeds;
+    TArray<FIntPoint> TriangleRanges; // local first seed, subdivision N (N*N seeds)
     int32 Num() const { return Seeds.Num()/6; }
 };
 struct FRuntimeSurfelInstance
@@ -16,8 +18,17 @@ struct FRuntimeSurfelInstance
     TSharedPtr<const FRuntimeSurfelAsset,ESPMode::ThreadSafe> Asset;
     FTransform Transform;
 };
+// Immutable GPU geometry snapshot for a lighting generation. The copy command
+// precedes lighting work, so edits to the live pool cannot mix generations.
+struct FRuntimeSurfelSnapshot
+{
+    TRefCountPtr<FRDGPooledBuffer> Buffer;
+    TArray<uint32> ActiveSlots;
+    uint32 Capacity=0;
+    ~FRuntimeSurfelSnapshot();
+};
 // Stage one: persistent GPU surface pool and hashed multiresolution cell index.
-// No irradiance cache or lighting replacement yet. Readback is diagnostic only.
+// Surface data only; FRuntimeGPU owns lighting. Readback here is diagnostic only.
 class FRuntimeSurfelPool
 {
 public:
@@ -29,6 +40,8 @@ public:
     // False while pending. Result contains a CPU oracle vs GPU pool/grid/query audit.
     bool PollAudit(FString& Result,bool& Passed);
     uint32 Revision() const;
+    FVector4f TriangleBinding(uint32 Owner,int32 Triangle) const;
+    TSharedPtr<FRuntimeSurfelSnapshot,ESPMode::ThreadSafe> CaptureLightingSnapshot() const;
 private:
     struct FImpl;
     TUniquePtr<FImpl> Impl;

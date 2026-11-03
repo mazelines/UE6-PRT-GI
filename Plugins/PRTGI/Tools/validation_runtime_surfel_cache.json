@@ -1,0 +1,310 @@
+{
+  "date": "2026-11-03",
+  "branch": "feat/runtime-surfel-gi",
+  "base_commit": "3f4445f",
+  "build": {
+    "success": true,
+    "module_suffix": 6168,
+    "configuration": "UE6 Win64 Development Editor DX12/SM6",
+    "note": "Main live scenarios and timings used 6167. Final 6168 adds retained-cache lifetime/scratch release; all 19 tests rerun and 5/2-sweep outputs checked byte-exact."
+  },
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "cpu": "Intel Core i9-14900KF",
+    "map": "/PRTGI/Maps/PRTGI_Showcase",
+    "lighting_volume": "PRT_ClassicBox",
+    "instances": 53,
+    "triangles": 11400,
+    "surfels": 18312,
+    "probes": 512,
+    "probe_rays": 256,
+    "reference_bounces": 6,
+    "probes_per_batch": 32,
+    "local_seed_spacing_cm": 50,
+    "camera": {
+      "location": {
+        "x": -929.3068251871672,
+        "y": 94.08158306990055,
+        "z": 616.4994622794061
+      },
+      "rotation": {
+        "pitch": -15.60000035165944,
+        "yaw": 26.400000712698272,
+        "roll": -6.442676799398889e-07
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      }
+    }
+  },
+  "defaults": {
+    "r.PRTGI.Runtime.SurfelCache": 0,
+    "r.PRTGI.Runtime.CacheIterations": 5,
+    "r.PRTGI.Runtime.CacheRays": 64,
+    "r.PRTGI.Runtime.CacheBatch": 256,
+    "r.PRTGI.Runtime.CacheRelaxation": 1
+  },
+  "method": "Compare RGB SH9 for common valid probes, relative L2 with named reference as denominator. Not a pixel metric or path-tracing ground truth. Fixed per-surfel cosine samples; full reset for each changed generation. Runtime.Bounces controls only reference tracing; cache uses CacheIterations.",
+  "comparisons": [
+    {
+      "reference": "reference6",
+      "candidate": "cache5",
+      "reference_scale": 1,
+      "common_valid_probes": 475,
+      "relative_l2": 0.10512715032892177,
+      "l0_rgb_sum_ratio": 1.0111207370377744,
+      "validity_masks_equal": true
+    },
+    {
+      "reference": "cache2",
+      "candidate": "cache5",
+      "reference_scale": 1,
+      "common_valid_probes": 475,
+      "relative_l2": 0.10373832228259836,
+      "l0_rgb_sum_ratio": 1.1200128613815785,
+      "validity_masks_equal": true
+    },
+    {
+      "reference": "cache5",
+      "candidate": "cache8",
+      "reference_scale": 1,
+      "common_valid_probes": 475,
+      "relative_l2": 0.013760310860195095,
+      "l0_rgb_sum_ratio": 1.013553571899691,
+      "validity_masks_equal": true
+    },
+    {
+      "reference": "reference6",
+      "candidate": "cache5_rays256",
+      "reference_scale": 1,
+      "common_valid_probes": 475,
+      "relative_l2": 0.10209045876272625,
+      "l0_rgb_sum_ratio": 1.0085531948424762,
+      "validity_masks_equal": true
+    },
+    {
+      "reference": "cache5",
+      "candidate": "moved_cache",
+      "reference_scale": 1,
+      "common_valid_probes": 469,
+      "relative_l2": 0.05901742280394326,
+      "l0_rgb_sum_ratio": 1.008991945863757,
+      "validity_masks_equal": false
+    },
+    {
+      "reference": "moved_reference",
+      "candidate": "moved_cache",
+      "reference_scale": 1,
+      "common_valid_probes": 475,
+      "relative_l2": 0.10498373185160646,
+      "l0_rgb_sum_ratio": 1.0149535125499762,
+      "validity_masks_equal": true
+    }
+  ],
+  "regressions": {
+    "half_light": {
+      "reference": "cache5",
+      "candidate": "half_light",
+      "reference_scale": 0.5,
+      "common_valid_probes": 475,
+      "relative_l2": 1.857746740484751e-09,
+      "l0_rgb_sum_ratio": 0.9999999999649894,
+      "validity_masks_equal": true
+    },
+    "zero_light_max_abs_sh": 0.0,
+    "restored_cache_byte_exact": true,
+    "rapid_changes_byte_exact": true,
+    "rapid_discarded_generations": 2,
+    "pie_byte_exact": true,
+    "reference_restored_byte_exact": true,
+    "prechange_reference_byte_exact": true,
+    "retained_cache_byte_exact": true,
+    "retained_cache_replaced_byte_exact": true
+  },
+  "live_scenarios": [
+    {
+      "name": "reference6",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=1 Discarded=0 Pending=0 Published=1 ChartUpdates=53 SnapshotMs=41.235 ConvergenceSeconds=0.683 Error= SurfelPool=disabled SurfelError= LastAudit=[] SurfelCache=0 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "cache2",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=3 Discarded=0 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.494 ConvergenceSeconds=2.802 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=2 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "cache5",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=2 Discarded=0 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=12.239 ConvergenceSeconds=6.577 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "cache8",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=4 Discarded=0 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=10.870 ConvergenceSeconds=10.636 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=8 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "moved_cache",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=5 Discarded=0 Pending=0 Published=1 ChartUpdates=1 SnapshotMs=9.882 ConvergenceSeconds=6.379 Error= SurfelRevision=2 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=1 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "moved_reference",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=6 Discarded=0 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=8.834 ConvergenceSeconds=0.350 Error= SurfelPool=disabled SurfelError= LastAudit=[] SurfelCache=0 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "restored_cache",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=7 Discarded=0 Pending=0 Published=1 ChartUpdates=1 SnapshotMs=9.058 ConvergenceSeconds=6.388 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "half_light",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=8 Discarded=0 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.518 ConvergenceSeconds=6.470 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "zero_light",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=9 Discarded=0 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.241 ConvergenceSeconds=6.431 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "rapid_restored",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=12 Discarded=2 Pending=0 Published=1 ChartUpdates=1 SnapshotMs=9.468 ConvergenceSeconds=6.587 Error= SurfelRevision=4 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=1 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "cache5_rays256",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=13 Discarded=2 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=10.945 ConvergenceSeconds=6.567 Error= SurfelRevision=4 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=1 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=256 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "pie_cache",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=1 Discarded=0 Pending=0 Published=1 ChartUpdates=53 SnapshotMs=44.561 ConvergenceSeconds=7.164 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "final_reference",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=2 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.238 ConvergenceSeconds=0.365 Error= SurfelPool=disabled SurfelError= LastAudit=[] SurfelCache=0 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 "
+    },
+    {
+      "name": "final_retained",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=2 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=9.782 ConvergenceSeconds=6.701 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 "
+    },
+    {
+      "name": "final_replaced",
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=32 Instances=53 Triangles=11400 Probes=512 Generation=3 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=10.019 ConvergenceSeconds=2.759 Error= SurfelRevision=1 SurfelOwners=53 SurfelLive=18312 SurfelCapacity=65536 SurfelUpdated=53 SurfelRetired=0 GridBuckets=16384 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=2 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 "
+    }
+  ],
+  "gpu_timing": {
+    "samples_ms": [
+      0.296,
+      0.328,
+      0.285
+    ],
+    "median_ms": 0.296,
+    "raw_lines": [
+      "[2026.11.03-14.49.32:525][411]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  5.6% \u250a \u258d        \u2502 0.296 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   5.6% \u250a \u258d        \u2502 0.296 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+      "[2026.11.03-14.49.33:212][492]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  8.1% \u250a \u258b        \u2502 0.328 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   8.1% \u250a \u258b        \u2502 0.328 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503",
+      "[2026.11.03-14.49.35:300][738]LogRHI: Display:     \u2503     0 \u2502      1 \u2502    0 \u2502    0 \u2502  7.1% \u250a \u258c        \u2502 0.285 ms \u2503     0 \u2502      1 \u2502     0 \u2502     0 \u2502   7.1% \u250a \u258c        \u2502 0.285 ms \u2503          PRT Surfel Irradiance Sweep                                                                                                                 \u2503"
+    ],
+    "method": "ProfileGPU frames captured during a restored-layout solve, 256 surfels/64 rays per batch. Three of five requested captures contained a sweep. Individual dispatch timings only; not full-solve or total-frame costs. No statistical performance guarantee."
+  },
+  "automation": {
+    "command": "Automation RunTests PRTGI.",
+    "passed": 19,
+    "failed": 0,
+    "results": [
+      [
+        "Success",
+        "PRTGI.Capture.ConsoleScope"
+      ],
+      [
+        "Success",
+        "PRTGI.Integration.EditorPIECacheIdentity"
+      ],
+      [
+        "Success",
+        "PRTGI.Math.ConstantRadianceProducesPiIrradiance"
+      ],
+      [
+        "Success",
+        "PRTGI.Math.FibonacciProjectionRecoversSH3"
+      ],
+      [
+        "Success",
+        "PRTGI.MultiBounce.AdaptiveBudget"
+      ],
+      [
+        "Success",
+        "PRTGI.MultiBounce.AnalyticTwoPlanes"
+      ],
+      [
+        "Success",
+        "PRTGI.MultiBounce.MaterialChartIsolation"
+      ],
+      [
+        "Success",
+        "PRTGI.MultiBounce.SurfaceBindingAndThinOccluder"
+      ],
+      [
+        "Success",
+        "PRTGI.Runtime.AnalyticHemisphere"
+      ],
+      [
+        "Success",
+        "PRTGI.Runtime.SurfelCacheAnalytic"
+      ],
+      [
+        "Success",
+        "PRTGI.Runtime.SurfelInstanceIdentity"
+      ],
+      [
+        "Success",
+        "PRTGI.Runtime.SurfelPoolLifecycle"
+      ],
+      [
+        "Success",
+        "PRTGI.Settings.MapProfileIsolation"
+      ],
+      [
+        "Success",
+        "PRTGI.Surfel.CaptureAuditGrazing"
+      ],
+      [
+        "Success",
+        "PRTGI.Surfel.CubeAxialDepth"
+      ],
+      [
+        "Success",
+        "PRTGI.Surfel.PartialCaptureAudit"
+      ],
+      [
+        "Success",
+        "PRTGI.Surfel.RelightAndPersistence"
+      ],
+      [
+        "Success",
+        "PRTGI.Visibility.CapturedPlaneMapping"
+      ],
+      [
+        "Success",
+        "PRTGI.Visibility.NearClipSafety"
+      ]
+    ],
+    "fixture": "Unoccluded floor plus two downward receivers: E=pi*L and closed-form damped two-step transfer; batches 1 vs 256; final probe rho/pi; zero-light reset. Synthetic constant environment is fixture-only."
+  },
+  "memory": {
+    "surface_snapshot_bytes": 4194304,
+    "irradiance_double_buffer_bytes": 2097152,
+    "irradiance_retained_bytes": 1048576,
+    "note": "Computed array sizes, not measured VRAM. Excludes live pool/local seeds, scene BVH/materials, triangle bindings, active slots, SH/resolve and RHI overhead."
+  },
+  "limitations": [
+    "About 10.5% SH difference from reference at default settings; triangle-bound spatial approximation remains.",
+    "About 6.4-6.7 seconds for default full solve; old GI cleared until atomic publication.",
+    "Whole cache invalidated on layout/light/settings changes; no local dirty regions or history reuse.",
+    "One in-flight batch with 16-byte completion readback; final probe SH still read to CPU.",
+    "No direct per-pixel cache resolve, temporal MSME, radial depth, Radiance Cascades or mobile/cooked validation."
+  ],
+  "restoration": {
+    "map_sha256_before_after": "b814f80c59d5b6a49275f0d93e17f4ddf9dae1296b1f849dda0eefa32785a845",
+    "runtime": 0,
+    "surfel_pool": 0,
+    "surfel_cache": 0,
+    "all_six_volumes_enabled": true,
+    "dirty_map_packages": 0,
+    "dirty_content_packages": 0,
+    "camera_restored": true,
+    "preexisting_map_change_excluded": true
+  }
+}

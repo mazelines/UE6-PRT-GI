@@ -225,6 +225,31 @@ bool FRuntimeSurfelPool::Update(TConstArrayView<FRuntimeSurfelInstance> Items,FS
     });
     return true;
 }
+FRuntimeSurfelSnapshot::~FRuntimeSurfelSnapshot()
+{
+    auto B=MoveTemp(Buffer);
+    ENQUEUE_RENDER_COMMAND(PRTReleaseSurfelSnapshot)([B](FRHICommandListImmediate&){});
+}
+FVector4f FRuntimeSurfelPool::TriangleBinding(uint32 Owner,int32 Triangle)const
+{
+    const auto* R=Impl->Owners.Find(Owner);
+    if(!R || !R->Instance.Asset->TriangleRanges.IsValidIndex(Triangle))return FVector4f(0);
+    const auto Range=R->Instance.Asset->TriangleRanges[Triangle];
+    return FVector4f(float(R->Start+Range.X),float(Range.Y),float(Range.Y*Range.Y),float(Owner));
+}
+TSharedPtr<FRuntimeSurfelSnapshot,ESPMode::ThreadSafe> FRuntimeSurfelPool::CaptureLightingSnapshot()const
+{
+    auto Out=MakeShared<FRuntimeSurfelSnapshot,ESPMode::ThreadSafe>();Out->Capacity=Impl->Capacity;
+    for(const auto& Pair:Impl->Owners)for(uint32 I=0;I<Pair.Value.Count;++I)Out->ActiveSlots.Add(Pair.Value.Start+I);
+    Out->ActiveSlots.Sort();auto Render=Impl->Render;
+    ENQUEUE_RENDER_COMMAND(PRTCopySurfelSnapshot)([Out,Render](FRHICommandListImmediate& RHICmdList)
+    {
+        FRDGBuilder Graph(RHICmdList);auto Source=Graph.RegisterExternalBuffer(Render->Pool);
+        auto Copy=Graph.CreateBuffer(Source->Desc,TEXT("PRT.Cache.SurfaceSnapshot"));
+        AddCopyBufferPass(Graph,Copy,Source);Out->Buffer=Graph.ConvertToExternalBuffer(Copy);Graph.Execute();
+    });
+    return Out;
+}
 FString FRuntimeSurfelPool::Status()const
 {
     const auto& S=*Impl;

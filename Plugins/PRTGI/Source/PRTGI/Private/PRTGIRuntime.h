@@ -5,10 +5,9 @@
 class UWorld;
 namespace PRTGI
 {
-// PC reference implementation for live transport. Asset material charts are
-// prepared once; no scene transfer matrix or evaluated light is cached on disk.
-// Triangle traversal deliberately provides a watertight reference for a future
-// disk-surfel / radiance-cascade implementation.
+// PC live transport with reference path tracing and an optional iterative
+// surface irradiance cache. Both use triangle BVH traversal. Asset charts are
+// prepared once; no scene transfer matrix or evaluated light is stored on disk.
 class FRuntimeGI
 {
 public:
@@ -27,6 +26,7 @@ private:
     TUniquePtr<FState> State;
 };
 
+struct FRuntimeSurfelSnapshot;
 struct FRuntimeScene
 {
     TSharedPtr<FMultiBounceData, ESPMode::ThreadSafe> Geometry;
@@ -34,6 +34,13 @@ struct FRuntimeScene
     TArray<FVector4f> Lights; // direction/position+type, radiance/intensity+radius
     TArray<FVector4f> Probes;
     TArray<FPRTGIRenderVolume> Volumes;
+    TSharedPtr<FRuntimeSurfelSnapshot,ESPMode::ThreadSafe> SurfelSnapshot;
+    TArray<FVector4f> SurfelBindings; // sorted BVH triangle -> first slot, N, count, owner
+    int32 CacheIterations=5,CacheRays=64,CacheBatch=256;
+    float CacheRelaxation=1.f;
+    // Isolated analytic fixtures only; live scene input stays black.
+    FVector3f AnalyticEnvironment=FVector3f::ZeroVector;
+    bool ReadCacheForTest=false;
     int32 Bounces = 6;
     int32 Rays = 256;
 };
@@ -47,6 +54,10 @@ public:
     // Schedules at most one bounded batch per tick. Publication is atomic for
     // the whole scene; a caller must reject obsolete layout/light generations.
     bool Tick(TArray<FVector4f>& Output);
+    const TArray<FVector4f>& CacheResultForTest() const;
+    FString Progress() const;
+    // Call only after Tick has returned the completed probe output.
+    void RetainCacheAndReleaseScratch();
 private:
     struct FState;
     TSharedPtr<FState, ESPMode::ThreadSafe> State;
