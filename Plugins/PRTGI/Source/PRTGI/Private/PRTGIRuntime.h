@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "PRTGIVolumeData.h"
+#include "RenderGraphResources.h"
 
 class UWorld;
 class APRTProbeVolume;
@@ -32,6 +33,14 @@ private:
 };
 
 struct FRuntimeSurfelSnapshot;
+struct FRuntimeTransportHistory
+{
+    TRefCountPtr<FRDGPooledBuffer> Queries;
+    TSharedPtr<FRuntimeSurfelSnapshot,ESPMode::ThreadSafe> Surface;
+    uint64 Bytes=0;
+    int32 Rays=0;
+    ~FRuntimeTransportHistory();
+};
 struct FRuntimeScene
 {
     TSharedPtr<FMultiBounceData, ESPMode::ThreadSafe> Geometry;
@@ -44,6 +53,9 @@ struct FRuntimeScene
     int32 CacheIterations=5,CacheRays=64,CacheBatch=256,CacheBatchesPerSubmit=8;
     float CacheRelaxation=1.f;
     bool ReuseTransport=false;
+    bool RegionalTransport=false;
+    FBox3f ChangedBounds{ForceInit};
+    TArray<uint32> OldToNewTriangles;
     uint64 TransportBudgetBytes=64ull*1024*1024;
     // Isolated analytic fixtures only; live scene input stays black.
     FVector3f AnalyticEnvironment=FVector3f::ZeroVector;
@@ -57,7 +69,9 @@ class FRuntimeGPU
 public:
     FRuntimeGPU();
     ~FRuntimeGPU();
-    void Submit(TSharedPtr<const FRuntimeScene, ESPMode::ThreadSafe> Scene, int32 Budget);
+    void Submit(TSharedPtr<const FRuntimeScene, ESPMode::ThreadSafe> Scene, int32 Budget,
+        TSharedPtr<FRuntimeTransportHistory,ESPMode::ThreadSafe> History=nullptr);
+    TSharedPtr<FRuntimeTransportHistory,ESPMode::ThreadSafe> CaptureTransportHistory() const;
     // Schedules at most one bounded submission per tick. Publication is atomic for
     // the whole scene; a caller must reject obsolete layout/light generations.
     bool Tick(TArray<FVector4f>& Output, bool bAllowSubmission=true);

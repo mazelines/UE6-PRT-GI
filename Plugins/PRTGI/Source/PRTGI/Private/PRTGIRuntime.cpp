@@ -43,7 +43,8 @@ TAutoConsoleVariable<int32> CacheBatchesPerSubmit(TEXT("r.PRTGI.Runtime.CacheBat
 TAutoConsoleVariable<int32> KeepLighting(TEXT("r.PRTGI.Runtime.KeepLightingWhileUpdating"),1,TEXT("Keep published cache lighting while geometry/probe layout is unchanged. Geometry edits still clear old GI."));
 TAutoConsoleVariable<int32> RoomsEnabled(TEXT("r.PRTGI.Runtime.Rooms"),0,TEXT("Opt-in independent room jobs. Each enabled volume requires explicit Runtime Included Actors or Participant Tags. Shared lights affect all rooms."));
 TAutoConsoleVariable<int32> ReuseTransport(TEXT("r.PRTGI.Runtime.ReuseTransport"),0,TEXT("Cache ray hits and direct irradiance within one immutable lighting generation. Retrace after geometry/light changes. Experimental PC memory/performance tradeoff."));
-TAutoConsoleVariable<int32> TransportBudgetMB(TEXT("r.PRTGI.Runtime.TransportBudgetMB"),64,TEXT("0..512 MiB per room/job for transport queries; 32 bytes per active surfel and cache ray. Over-budget jobs use the original tracing path. Released after projection."));
+TAutoConsoleVariable<int32> TransportBudgetMB(TEXT("r.PRTGI.Runtime.TransportBudgetMB"),64,TEXT("0..512 MiB per room/job for transport queries; 32 bytes per ray, or 48 for regional history. Regional reuse also budgets the old table. Over-budget jobs fall back; regional histories remain after projection."));
+TAutoConsoleVariable<int32> RegionalTransport(TEXT("r.PRTGI.Runtime.RegionalTransport"),0,TEXT("Opt-in retained transport queries. Retrace rays intersecting changed instance bounds or their shadow segments. Same participants/materials/lights and stable surface slots required. Irradiance still recomputed globally within each affected room."));
 bool NeedsSurfelPool() { return SurfelPoolEnabled.GetValueOnGameThread()!=0 || UseSurfelCache.GetValueOnGameThread()!=0; }
 struct FHash
 {
@@ -63,6 +64,7 @@ struct FAsset
     TArray<FAssetTriangle> Triangles;
     TSharedPtr<FRuntimeSurfelAsset,ESPMode::ThreadSafe> Surfels;
     FString SurfelError;
+    FBox Bounds{ForceInit};
 };
 struct FInstance
 {
@@ -77,6 +79,14 @@ struct FSurfelOwnerKey
     FSMInstanceElementId Element;
     bool operator==(const FSurfelOwnerKey& R)const { return Component==R.Component && Element==R.Element; }
     friend uint32 GetTypeHash(const FSurfelOwnerKey& K) { return HashCombine(GetTypeHash(K.Component),GetTypeHash(K.Element)); }
+};
+struct FInstanceRecord
+{
+    FSurfelOwnerKey Owner;
+    FString AssetKey;
+    FTransform Transform;
+    FBox Bounds;
+    bool Shadow=false;
 };
 struct FWorldTriangle
 {
@@ -215,6 +225,7 @@ TSharedPtr<FAsset> PrepareAsset(UStaticMeshComponent* C,FString& Error)
             for(int32 V=0;V<3;++V)
             {
                 const uint32 Index=Indices[I+V];Tri.P[V]=LOD.VertexBuffers.PositionVertexBuffer.VertexPosition(Index);
+                Asset->Bounds+=FVector(Tri.P[V]);
                 Tri.N[V]=LOD.VertexBuffers.StaticMeshVertexBuffer.VertexTangentZ(Index);
                 Tri.T[V]=LOD.VertexBuffers.StaticMeshVertexBuffer.VertexTangentX(Index);
                 Tri.B[V]=LOD.VertexBuffers.StaticMeshVertexBuffer.VertexTangentY(Index);
@@ -290,7 +301,7 @@ uint32 Signature(const TArray<FInstance>& Items,const FRuntimeScene& Scene,uint3
     for(const auto& L:Scene.Lights)H.Add(L);
     H.Add(Scene.Rays);H.Add(Scene.Bounces);H.Add(UseSurfelCache.GetValueOnGameThread());
     H.Add(Scene.CacheIterations);H.Add(Scene.CacheRays);H.Add(Scene.CacheBatch);H.Add(Scene.CacheRelaxation);H.Add(Scene.CacheBatchesPerSubmit);H.Add(KeepLighting.GetValueOnGameThread());
-    H.Add(Scene.ReuseTransport);H.Add(Scene.TransportBudgetBytes);return H.Value;
+    H.Add(Scene.RegionalTransport);H.Add(Scene.ReuseTransport);H.Add(Scene.TransportBudgetBytes);return H.Value;
 }
 void SetVolumeStatus(UWorld* World,const FString& Message,const TArray<FPRTGIRenderVolume>& Published,int32 BounceCount,const APRTProbeVolume* Room)
 {
@@ -325,6 +336,7 @@ struct FRuntimeGI::FState
     // chair does not re-transform every sphere's 64 material samples/triangle.
     TMap<FString,TSharedPtr<TArray<FVector4f>>> WorldCharts;
     TSharedPtr<FRuntimeScene,ESPMode::ThreadSafe> Job;
+    TArray<FInstanceRecord> JobInstances;
     TUniquePtr<FRuntimeGPU> GPU,SolvedCache;
     TArray<FPRTGIRenderVolume> Published;
     uint32 Requested=0,Completed=0,PublishedGeometry=0;
@@ -439,7 +451,8 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
     Scene->CacheBatch=FMath::Clamp(CacheBatch.GetValueOnGameThread(),32,1024);
     Scene->CacheBatchesPerSubmit=FMath::Clamp(CacheBatchesPerSubmit.GetValueOnGameThread(),1,32);
     Scene->CacheRelaxation=FMath::Clamp(CacheRelaxation.GetValueOnGameThread(),.1f,1.f);
-    Scene->ReuseTransport=ReuseTransport.GetValueOnGameThread()!=0;
+    Scene->RegionalTransport=RegionalTransport.GetValueOnGameThread()!=0;
+    Scene->ReuseTransport=ReuseTransport.GetValueOnGameThread()!=0 || Scene->RegionalTransport;
     Scene->TransportBudgetBytes=uint64(FMath::Clamp(TransportBudgetMB.GetValueOnGameThread(),0,512))*1024*1024;
     FString Error;
     if(!ReadVolumes(World,*Scene,Error,Room))
@@ -498,6 +511,41 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
         S.HoldingLighting=KeepLighting.GetValueOnGameThread()!=0 && UseSurfelCache.GetValueOnGameThread()!=0 &&
             S.PublishedCache && S.PublishedGeometry==GeometrySignature && !S.Published.IsEmpty();
         if(!S.HoldingLighting)S.Published.Reset();
+        const auto OldScene=S.Job;
+        TSharedPtr<FRuntimeTransportHistory,ESPMode::ThreadSafe> History;
+        TArray<FInstanceRecord> Records;
+        bool Compatible=Scene->RegionalTransport && S.SolvedCache && OldScene && OldScene->RegionalTransport &&
+            OldScene->Lights==Scene->Lights && OldScene->CacheRays==Scene->CacheRays && Items.Num()==S.JobInstances.Num();
+        FBox Changed(ForceInit);
+        for(int32 I=0;I<Items.Num();++I)
+        {
+            const auto& Item=Items[I];const auto Asset=S.Assets.FindRef(Item.Key);
+            if(!Asset){Compatible=false;continue;}
+            FInstanceRecord Record{{FObjectKey(Item.Component),Item.Element},Item.Key,Item.Transform,
+                Asset->Bounds.TransformBy(Item.Transform),bool(Item.Component->CastShadow)};
+            if(Compatible)
+            {
+                const auto& Old=S.JobInstances[I];
+                // Scale changes currently fail the strict full-trace comparison in
+                // the Showcase fixture. Keep them on the conservative full path.
+                if(!(Old.Owner==Record.Owner) || Old.AssetKey!=Record.AssetKey || Old.Shadow!=Record.Shadow ||
+                    !Old.Transform.GetScale3D().Equals(Record.Transform.GetScale3D(),0))Compatible=false;
+                else if(!Old.Transform.Equals(Record.Transform,0)) { Changed+=Old.Bounds;Changed+=Record.Bounds; }
+            }
+            Records.Add(MoveTemp(Record));
+        }
+        if(Compatible)
+        {
+            History=S.SolvedCache->CaptureTransportHistory();
+            if(Changed.IsValid)
+            {
+                // Conservative float-position allowance, including old hit endpoints.
+                const double Margin=1.+8*FLT_EPSILON*FMath::Max(Changed.Min.GetAbsMax(),Changed.Max.GetAbsMax());
+                const auto Padded=Changed.ExpandBy(Margin);
+                Scene->ChangedBounds=FBox3f(FVector3f(Padded.Min),FVector3f(Padded.Max));
+            }
+        }
+        S.JobInstances=MoveTemp(Records);
         if(S.GPU) { ++S.Discarded;S.GPU.Reset(); }
         S.SolvedCache.Reset();S.Job.Reset();S.Requested=Current;S.Error.Reset();S.Instances=Items.Num();
         TArray<FWorldTriangle> Triangles;
@@ -541,9 +589,22 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
             Scene->Materials.Append(T.Samples,128);Scene->SurfelBindings.Add(T.SurfelBinding);
         }
         if(UseSurfelCache.GetValueOnGameThread()!=0)Scene->SurfelSnapshot=S.Surfels->CaptureLightingSnapshot();
+        if(History && OldScene)
+        {
+            // BVH sorting changes triangle indices. Stable owner/first-slot keys
+            // identify the same local triangle without retaining UObject pointers.
+            auto Key=[](const FVector4f& B){return (uint64(uint32(B.W))<<32)|uint32(B.X);};
+            TMap<uint64,uint32> NewIndices;
+            for(int32 I=0;I<Scene->SurfelBindings.Num();++I)if(Scene->SurfelBindings[I].Y>0)NewIndices.Add(Key(Scene->SurfelBindings[I]),I);
+            for(const auto& Binding:OldScene->SurfelBindings)
+            {
+                const auto* Index=Binding.Y>0?NewIndices.Find(Key(Binding)):nullptr;
+                Scene->OldToNewTriangles.Add(Index?*Index:MAX_uint32);
+            }
+        }
         S.WorldCharts=MoveTemp(NextCharts);
         S.Triangles=Triangles.Num();S.SnapshotMs=(FPlatformTime::Seconds()-Start)*1000;
-        S.Job=Scene;S.GPU=MakeUnique<FRuntimeGPU>();S.GPU->Submit(Scene,Budget.GetValueOnGameThread());
+        S.Job=Scene;S.GPU=MakeUnique<FRuntimeGPU>();S.GPU->Submit(Scene,Budget.GetValueOnGameThread(),History);
         S.Started=Now;++S.Generations;
         SetVolumeStatus(World,TEXT("Runtime reference: updating (no scene precompute)"),S.Published,0,Room);
         UE_LOG(LogPRTRuntime,Display,TEXT("Generation %d: %d instances, %d triangles, %d probes, CPU snapshot %.2f ms"),S.Generations,S.Instances,S.Triangles,Scene->Probes.Num(),S.SnapshotMs);

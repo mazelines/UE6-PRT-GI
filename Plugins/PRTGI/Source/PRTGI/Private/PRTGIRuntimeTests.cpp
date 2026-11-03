@@ -89,7 +89,7 @@ public:
     }
     bool Update()override
     {
-        const int32 Case=Stage==14?1:Stage%7;
+        const int32 Case=Stage>=14?1:Stage%7;
         if(!GPU)
         {
             auto Scene=MakeShared<PRTGI::FRuntimeScene,ESPMode::ThreadSafe>();
@@ -104,12 +104,19 @@ public:
             Iterations=Case==0?1:((Case<3 || Case>=5)?2:8);Alpha=Case==3?.5f:1.f;
             Scene->CacheIterations=Iterations;Scene->CacheRelaxation=Alpha;Scene->CacheBatch=Case==2?256:1;
             Scene->CacheBatchesPerSubmit=Case==5?2:(Case==6?8:1);
-            Scene->ReuseTransport=Stage>=7;
+            Scene->ReuseTransport=Stage>=7;Scene->RegionalTransport=Stage>=7;
+            if(Stage>=15)
+            {
+                Scene->OldToNewTriangles={0,1};
+                if(Stage==16)Scene->ChangedBounds=FBox3f(FVector3f(-20000000),FVector3f(20000000));
+                if(Stage==17)Scene->ChangedBounds=FBox3f(FVector3f(-20000000,-20000000,2),FVector3f(20000000,20000000,3));
+                if(Stage==18)Scene->ChangedBounds=FBox3f(FVector3f(-20000000,-20000000,-3),FVector3f(20000000,20000000,-2));
+            }
             if(Stage==14)Scene->TransportBudgetBytes=0;
             Scene->CacheRays=64;Scene->Rays=1024;Scene->Probes={FVector4f(0,0,1,1)};
             Scene->AnalyticEnvironment=Case==4?FVector3f(0):FVector3f(2,3,5);
             if(Case!=4)Scene->Lights={FVector4f(0,0,1,0),FVector4f(2*UE_PI,2*UE_PI,2*UE_PI,0)};
-            GPU=MakeUnique<PRTGI::FRuntimeGPU>();GPU->Submit(Scene,1);Started=FPlatformTime::Seconds();
+            GPU=MakeUnique<PRTGI::FRuntimeGPU>();GPU->Submit(Scene,1,Stage>=15?History:nullptr);Started=FPlatformTime::Seconds();
         }
         TArray<FVector4f> SH;
         // Room scheduling must retire pending work without granting another
@@ -147,7 +154,12 @@ public:
         }
         const bool ExpectedReuse=Stage>=7 && Case!=0 && Stage!=14;
         Test->TestTrue(TEXT("Single-sweep and budget fallback selection"),GPU->Progress().Contains(ExpectedReuse?TEXT("TransportReuse=1"):TEXT("TransportReuse=0")));
-        GPU.Reset();++Stage;return Stage==15;
+        if(Stage==8){GPU->RetainCacheAndReleaseScratch();History=GPU->CaptureTransportHistory();Test->TestTrue(TEXT("Completed query history retained"),History.IsValid());}
+        if(Stage==15)Test->TestTrue(TEXT("Unchanged dependency queries all reused"),GPU->Progress().Contains(TEXT("QueriesReused=192 QueriesRebuilt=0")));
+        if(Stage==16)Test->TestTrue(TEXT("Changed bounds invalidate all ray segments"),GPU->Progress().Contains(TEXT("QueriesReused=0 QueriesRebuilt=192")));
+        if(Stage==17)Test->TestTrue(TEXT("Shadow segments invalidate hits outside the changed region"),GPU->Progress().Contains(TEXT("QueriesReused=0 QueriesRebuilt=192")));
+        if(Stage==18)Test->TestTrue(TEXT("Geometry behind first hits does not invalidate queries"),GPU->Progress().Contains(TEXT("QueriesReused=192 QueriesRebuilt=0")));
+        GPU.Reset();++Stage;return Stage==19;
     }
 private:
     FAutomationTestBase* Test;
@@ -156,6 +168,7 @@ private:
     TUniquePtr<PRTGI::FRuntimeGPU> GPU;
     TArray<FVector4f> Previous;
     TArray<TArray<FVector4f>> ExpectedCache,ExpectedSH;
+    TSharedPtr<PRTGI::FRuntimeTransportHistory,ESPMode::ThreadSafe> History;
     int32 Stage=0,Iterations=0,Ticks=0;float Alpha=1;double Started=0;
 };
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPRTCacheAnalytic,"PRTGI.Runtime.SurfelCacheAnalytic",

@@ -40,6 +40,15 @@ class FPRTRuntimeCS : public FGlobalShader
         SHADER_PARAMETER(float,CacheRelaxation)
         SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,TransportQueries)
         SHADER_PARAMETER(uint32,ReuseTransport)
+        SHADER_PARAMETER(uint32,QueryStride)
+        SHADER_PARAMETER(uint32,RegionalReuse)
+        SHADER_PARAMETER(uint32,HasChangedBounds)
+        SHADER_PARAMETER(FVector3f,ChangedMin)
+        SHADER_PARAMETER(FVector3f,ChangedMax)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,OldQueries)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,OldSurfacePool)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint>,OldToNewTriangles)
+        SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint>,QueryStats)
         SHADER_PARAMETER(FVector3f,AnalyticEnvironment)
     END_SHADER_PARAMETER_STRUCT()
 };
@@ -59,7 +68,11 @@ struct FRuntimeGPU::FState
     TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Scene;
     TRefCountPtr<FRDGPooledBuffer> Triangles,Nodes,Materials,Lights,Probes,SH;
     TRefCountPtr<FRDGPooledBuffer> Bindings,Active,Irradiance[2];
-    TRefCountPtr<FRDGPooledBuffer> TransportQueries;
+    TRefCountPtr<FRDGPooledBuffer> TransportQueries,TriangleRemap,QueryStats;
+    TSharedPtr<FRuntimeTransportHistory,ESPMode::ThreadSafe> History;
+    TUniquePtr<FRHIGPUBufferReadback> StatsReadback;
+    uint32 ReusedQueries=0,RebuiltQueries=0,QueryStride=2;
+    bool RegionalReuse=false;
     uint64 TransportBytes=0;
     bool ReuseTransport=false,ScratchReleased=false;
     TUniquePtr<FRHIGPUBufferReadback> Readback,CacheReadback;
@@ -73,6 +86,20 @@ struct FRuntimeGPU::FState
     int32 Offset=0,Budget=32;
     bool Pending=false;
 };
+FRuntimeTransportHistory::~FRuntimeTransportHistory()
+{
+    auto Buffer=MoveTemp(Queries);
+    ENQUEUE_RENDER_COMMAND(PRTReleaseTransportHistory)([Buffer](FRHICommandListImmediate&){});
+}
+TSharedPtr<FRuntimeTransportHistory,ESPMode::ThreadSafe> FRuntimeGPU::CaptureTransportHistory() const
+{
+    auto S=State;
+    if(!S->ScratchReleased || !S->ReuseTransport || !S->Scene->RegionalTransport)return nullptr;
+    auto History=MakeShared<FRuntimeTransportHistory,ESPMode::ThreadSafe>();
+    History->Surface=S->Scene->SurfelSnapshot;History->Rays=S->Scene->CacheRays;History->Bytes=S->TransportBytes;
+    ENQUEUE_RENDER_COMMAND(PRTCaptureTransportHistory)([S,History](FRHICommandListImmediate&){History->Queries=S->TransportQueries;});
+    return History;
+}
 FRuntimeGPU::FRuntimeGPU():State(MakeShared<FState,ESPMode::ThreadSafe>()){}
 FRuntimeGPU::~FRuntimeGPU()
 {
@@ -82,27 +109,32 @@ FRuntimeGPU::~FRuntimeGPU()
         S->Fence.SafeRelease();S->Readback.Reset();S->CacheReadback.Reset();S->Triangles.SafeRelease();S->Nodes.SafeRelease();
         S->Bindings.SafeRelease();S->Active.SafeRelease();S->Irradiance[0].SafeRelease();S->Irradiance[1].SafeRelease();
         S->Materials.SafeRelease();S->Lights.SafeRelease();S->Probes.SafeRelease();S->SH.SafeRelease();
-        S->TransportQueries.SafeRelease();
+        S->TransportQueries.SafeRelease();S->TriangleRemap.SafeRelease();S->QueryStats.SafeRelease();S->StatsReadback.Reset();
     });
 }
-void FRuntimeGPU::Submit(TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Scene,int32 InProbeBudget)
+void FRuntimeGPU::Submit(TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Scene,int32 InProbeBudget,TSharedPtr<FRuntimeTransportHistory,ESPMode::ThreadSafe> History)
 {
     check(!State->Scene);State->Scene=Scene;State->Budget=FMath::Clamp(InProbeBudget,1,256);
     State->CachePhase=Scene->SurfelSnapshot && !Scene->SurfelSnapshot->ActiveSlots.IsEmpty();
-    const uint64 Bytes=State->CachePhase?uint64(Scene->SurfelSnapshot->ActiveSlots.Num())*Scene->CacheRays*32:0;
+    State->QueryStride=Scene->RegionalTransport?3:2;
+    const uint64 Bytes=State->CachePhase?uint64(Scene->SurfelSnapshot->ActiveSlots.Num())*Scene->CacheRays*State->QueryStride*16:0;
     State->ReuseTransport=Scene->ReuseTransport && Scene->CacheIterations>1 && Bytes>0 && Bytes<=Scene->TransportBudgetBytes;
     State->TransportBytes=State->ReuseTransport?Bytes:0;
+    if(State->ReuseTransport && Scene->RegionalTransport && History && History->Rays==Scene->CacheRays &&
+        History->Surface->Capacity==Scene->SurfelSnapshot->Capacity && History->Surface->ActiveSlots==Scene->SurfelSnapshot->ActiveSlots &&
+        History->Bytes+Bytes<=Scene->TransportBudgetBytes && !Scene->OldToNewTriangles.IsEmpty())State->History=History;
+    State->RegionalReuse=State->History.IsValid();
 }
 const TArray<FVector4f>& FRuntimeGPU::CacheResultForTest()const { return State->CacheResult; }
 FString FRuntimeGPU::Progress()const
 {
     const auto& S=*State;
-    return FString::Printf(TEXT("CacheSweep=%d/%d CacheOffset=%d CachePhase=%d Submissions=%d TransportReuse=%d TransportBytes=%llu TransportRetained=%d"),S.Iteration,S.Scene?S.Scene->CacheIterations:0,S.CacheOffset,S.CachePhase,S.Submissions,S.ReuseTransport,S.TransportBytes,S.ReuseTransport && !S.ScratchReleased);
+    return FString::Printf(TEXT("CacheSweep=%d/%d CacheOffset=%d CachePhase=%d Submissions=%d TransportReuse=%d TransportBytes=%llu TransportRetained=%d RegionalReuse=%d QueriesReused=%u QueriesRebuilt=%u"),S.Iteration,S.Scene?S.Scene->CacheIterations:0,S.CacheOffset,S.CachePhase,S.Submissions,S.ReuseTransport,S.TransportBytes,S.ReuseTransport && (!S.ScratchReleased || S.Scene->RegionalTransport),S.RegionalReuse,S.ReusedQueries,S.RebuiltQueries);
 }
 void FRuntimeGPU::RetainCacheAndReleaseScratch()
 {
     auto S=State;
-    S->ScratchReleased=true;
+    S->ScratchReleased=true;S->History.Reset();
     ENQUEUE_RENDER_COMMAND(PRTRetainSolvedCache)([S](FRHICommandListImmediate&)
     {
         // Preserve the final irradiance and immutable surface snapshot until
@@ -110,7 +142,8 @@ void FRuntimeGPU::RetainCacheAndReleaseScratch()
         S->Triangles.SafeRelease();S->Nodes.SafeRelease();S->Materials.SafeRelease();
         S->Lights.SafeRelease();S->Probes.SafeRelease();S->SH.SafeRelease();
         S->Bindings.SafeRelease();S->Active.SafeRelease();S->Irradiance[1-S->Current].SafeRelease();
-        S->TransportQueries.SafeRelease();
+        if(!S->Scene->RegionalTransport)S->TransportQueries.SafeRelease();
+        S->TriangleRemap.SafeRelease();S->QueryStats.SafeRelease();
     });
 }
 bool FRuntimeGPU::HasPendingSubmission() const { return State->Pending; }
@@ -125,7 +158,7 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
             {
                 ENQUEUE_RENDER_COMMAND(PRTPollRuntime)([S](FRHICommandListImmediate&)
                 {
-                    if((S->Readback?S->Readback->IsReady():(S->Fence && S->Fence->Poll())) && (!S->CacheReadback || S->CacheReadback->IsReady()))
+                    if((S->Readback?S->Readback->IsReady():(S->Fence && S->Fence->Poll())) && (!S->CacheReadback || S->CacheReadback->IsReady()) && (!S->StatsReadback || S->StatsReadback->IsReady()))
                     {
                         if(S->Readback)
                         {
@@ -140,6 +173,12 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
                             if(const void* Ptr=S->CacheReadback->Lock(Size))
                             { S->CacheResult.SetNumUninitialized(Size/16);FMemory::Memcpy(S->CacheResult.GetData(),Ptr,Size);S->CacheReadback->Unlock(); }
                             S->CacheReadback.Reset();
+                        }
+                        if(S->StatsReadback)
+                        {
+                            if(const auto* Ptr=static_cast<const uint32*>(S->StatsReadback->Lock(8)))
+                            { S->ReusedQueries=Ptr[0];S->RebuiltQueries=Ptr[1];S->StatsReadback->Unlock(); }
+                            S->StatsReadback.Reset();
                         }
                         S->Readback.Reset();S->Ready.Store(true);
                     }
@@ -192,9 +231,14 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
                 auto B=Graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(16,Scene.SurfelSnapshot?Scene.SurfelSnapshot->Capacity:1),TEXT("PRT.Cache.Irradiance"));
                 AddClearUAVPass(Graph,Graph.CreateUAV(B),0);S->Irradiance[I]=Graph.ConvertToExternalBuffer(B);
             }
+            const TArray<uint32> NoRemap{MAX_uint32};
+            S->TriangleRemap=Graph.ConvertToExternalBuffer(CreateStructuredBuffer(Graph,TEXT("PRT.Cache.TriangleRemap"),Scene.OldToNewTriangles.IsEmpty()?NoRemap:Scene.OldToNewTriangles));
+            auto Stats=Graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(4,2),TEXT("PRT.Cache.QueryStats"));
+            AddClearUAVPass(Graph,Graph.CreateUAV(Stats),0);S->QueryStats=Graph.ConvertToExternalBuffer(Stats);
             auto SH=Graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(16,Scene.Probes.Num()*9),TEXT("PRT.Runtime.SH"));
             // Every active/ray row is initialized in sweep zero, including misses
-            // and rejected backfaces. No cross-generation data is reused.
+            // and rejected backfaces. Eligible regional history supplies rows
+            // only after the first-sweep dependency checks.
             S->TransportQueries=Graph.ConvertToExternalBuffer(Graph.CreateBuffer(
                 FRDGBufferDesc::CreateStructuredDesc(16,S->ReuseTransport?uint32(S->TransportBytes/16):1),TEXT("PRT.Cache.TransportQueries")));
             AddClearUAVPass(Graph,Graph.CreateUAV(SH),0);
@@ -220,7 +264,14 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
         P->CacheRayCount=Scene.CacheRays;P->CacheIteration=S->Iteration;P->CacheRelaxation=Scene.CacheRelaxation;
         P->AnalyticEnvironment=Scene.AnalyticEnvironment;
         P->TransportQueries=Graph.CreateUAV(Graph.RegisterExternalBuffer(S->TransportQueries));
-        P->ReuseTransport=S->ReuseTransport;
+        P->ReuseTransport=S->ReuseTransport;P->QueryStride=S->QueryStride;P->RegionalReuse=S->RegionalReuse;
+        P->HasChangedBounds=Scene.ChangedBounds.IsValid;
+        P->ChangedMin=Scene.ChangedBounds.IsValid?Scene.ChangedBounds.Min:FVector3f(0);
+        P->ChangedMax=Scene.ChangedBounds.IsValid?Scene.ChangedBounds.Max:FVector3f(0);
+        P->OldQueries=Graph.CreateSRV(Graph.RegisterExternalBuffer(S->History?S->History->Queries:S->Probes));
+        P->OldSurfacePool=Graph.CreateSRV(Graph.RegisterExternalBuffer(S->History?S->History->Surface->Buffer:S->Probes));
+        P->OldToNewTriangles=Graph.CreateSRV(Graph.RegisterExternalBuffer(S->TriangleRemap));
+        P->QueryStats=Graph.CreateUAV(Graph.RegisterExternalBuffer(S->QueryStats));
         const bool Last=!S->CachePhase && S->Offset+S->Budget>=Scene.Probes.Num();
         if(S->CachePhase)
         {
@@ -245,6 +296,8 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
         {
             S->Readback=MakeUnique<FRHIGPUBufferReadback>(TEXT("PRT.Runtime.Readback"));
             AddEnqueueCopyPass(Graph,S->Readback.Get(),SH,Scene.Probes.Num()*9*16);
+            if(Scene.RegionalTransport)
+            { S->StatsReadback=MakeUnique<FRHIGPUBufferReadback>(TEXT("PRT.Cache.QueryStatsReadback"));AddEnqueueCopyPass(Graph,S->StatsReadback.Get(),Graph.RegisterExternalBuffer(S->QueryStats),8); }
         }
         if(Last && Scene.SurfelSnapshot && Scene.ReadCacheForTest)
         {

@@ -24,6 +24,15 @@ uint CacheIteration;
 float CacheRelaxation;
 RWStructuredBuffer<float4> TransportQueries;
 uint ReuseTransport;
+uint QueryStride;
+uint RegionalReuse;
+uint HasChangedBounds;
+float3 ChangedMin;
+float3 ChangedMax;
+StructuredBuffer<float4> OldQueries;
+StructuredBuffer<float4> OldSurfacePool;
+StructuredBuffer<uint> OldToNewTriangles;
+RWStructuredBuffer<uint> QueryStats;
 float3 AnalyticEnvironment;
 
 bool BoxHit(float3 O, float3 D, float3 Min, float3 Max, float Limit)
@@ -36,9 +45,9 @@ bool BoxHit(float3 O, float3 D, float3 Min, float3 Max, float Limit)
     }
     return Hi>=Lo;
 }
-int Trace(float3 O,float3 D,inout float Distance,out float2 Bary,bool Shadow)
+int TraceWithAmbiguity(float3 O,float3 D,inout float Distance,out float2 Bary,bool Shadow,out float Ambiguous)
 {
-    int Hit=-1; Bary=0;
+    int Hit=-1; Bary=0;Ambiguous=0;
     uint Node=0;
     [loop] while(Node<NodeCount)
     {
@@ -54,11 +63,18 @@ int Trace(float3 O,float3 D,inout float Distance,out float2 Bary,bool Shadow)
             float U=dot(Delta,P)*Inv;if(U<0||U>1)continue;
             float3 Q=cross(Delta,E1);float V=dot(D,Q)*Inv;if(V<0||U+V>1)continue;
             float TDist=dot(E2,Q)*Inv;
+            float TieTolerance=.001+1.e-6*abs(Distance);
+            if(TDist>.002 && Hit>=0 && abs(TDist-Distance)<=TieTolerance)Ambiguous=1;
+            else if(TDist>.002 && TDist<Distance)Ambiguous=0;
             if(TDist>.002 && TDist<Distance) { Distance=TDist;Bary=float2(U,V);Hit=T;if(Shadow)return Hit; }
         }
         ++Node;
     }
     return Hit;
+}
+int Trace(float3 O,float3 D,inout float Distance,out float2 Bary,bool Shadow)
+{
+    float Unused;return TraceWithAmbiguity(O,D,Distance,Bary,Shadow,Unused);
 }
 uint Hash(uint X) { X^=X>>16;X*=0x7feb352d;X^=X>>15;X*=0x846ca68b;return X^(X>>16); }
 float Rand(inout uint Seed) { Seed=Hash(Seed);return (Seed>>8)*(1.0/16777216.0); }
@@ -174,6 +190,35 @@ void RuntimeCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
     }
 }
 
+bool ReuseOldQuery(uint Slot,uint Query,float3 Origin,float3 Direction)
+{
+    if(any(OldSurfacePool[Slot*4].xyz!=SurfacePool[Slot*4].xyz) ||
+       any(OldSurfacePool[Slot*4+1].xyz!=SurfacePool[Slot*4+1].xyz) ||
+       any(OldSurfacePool[Slot*4+3].xyz!=SurfacePool[Slot*4+3].xyz))return false;
+    float4 Record=OldQueries[Query],UV=OldQueries[Query+1];int Hit=int(Record.w);
+    // Negative distance denotes a rejected direction, invariant for this normal.
+    if(HasChangedBounds!=0 && UV.z>=0 && BoxHit(Origin,Direction,ChangedMin,ChangedMax,UV.z))return false;
+    if(Hit>=0)
+    {
+        // Equal/near-equal hits can select a different primitive after BVH
+        // reordering. Re-evaluate these even outside the changed bounds.
+        if(HasChangedBounds!=0 && UV.w>0)return false;
+        uint Mapped=OldToNewTriangles[Hit];if(Mapped==0xffffffff)return false;
+        float3 P=OldQueries[Query+2].xyz;
+        if(HasChangedBounds!=0)[loop]for(uint L=0;L<LightCount;++L)
+        {
+            float4 Light=Lights[L*2];float3 D=Light.xyz;float Limit=1.e7;
+            if(Light.w>0){D-=P;Limit=length(D);D/=max(Limit,.001);}
+            // Conservatively check every light, including currently occluded rays.
+            // A moved blocker can change visibility far outside the local bounds.
+            if(BoxHit(P,D,ChangedMin,ChangedMax,Limit))return false;
+        }
+        Record.w=float(Mapped);
+    }
+    TransportQueries[Query]=Record;TransportQueries[Query+1]=UV;
+    TransportQueries[Query+2]=OldQueries[Query+2];return true;
+}
+
 // Jacobi sweep: all batches read the same previous buffer. Swap only after
 // the entire active set is complete; no in-place radiance propagation.
 [numthreads(64,1,1)]
@@ -189,8 +234,14 @@ void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
         // Dense active indices, not sparse surface slots. The immutable scene
         // and deterministic samples make these geometric/light queries invariant
         // across Jacobi sweeps. Irradiance is still gathered anew every sweep.
-        uint Query=(Active*CacheRayCount+Ray)*2;
-        if(ReuseTransport!=0 && CacheIteration>0)
+        uint Query=(Active*CacheRayCount+Ray)*QueryStride;
+        float3 D=0;
+        if(CacheIteration==0 || ReuseTransport==0){uint Seed=Hash(Slot*8191+Ray+1);D=CosineDirection(N,Seed);}
+        bool Reused=false;
+        if(ReuseTransport!=0 && RegionalReuse!=0 && CacheIteration==0)
+            Reused=ReuseOldQuery(Slot,Query,Origin,D);
+        if(QueryStride==3 && CacheIteration==0)InterlockedAdd(QueryStats[Reused?0:1],1);
+        if(ReuseTransport!=0 && (CacheIteration>0 || Reused))
         {
             float4 Record=TransportQueries[Query];int Hit=int(Record.w);
             if(Hit<0){Sum+=Record.rgb;continue;}
@@ -203,13 +254,15 @@ void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
         {
             // Rejected directions/backfaces and misses must also overwrite rows.
             TransportQueries[Query]=float4(0,0,0,-1);
-            TransportQueries[Query+1]=0;
+            TransportQueries[Query+1]=float4(0,0,-1,0);
+            if(QueryStride==3)TransportQueries[Query+2]=0;
         }
         // Fixed samples define a deterministic transport operator. Relaxation
         // damps the iteration, not stochastic frame-to-frame noise.
-        uint Seed=Hash(Slot*8191+Ray+1);float3 D=CosineDirection(N,Seed);
         if(dot(D,Ng)<=0)continue;
-        float Distance=6400;float2 Bary;int Hit=Trace(Origin,D,Distance,Bary,false);
+        float Distance=6400;float2 Bary;float Ambiguous;
+        int Hit=TraceWithAmbiguity(Origin,D,Distance,Bary,false,Ambiguous);
+        if(ReuseTransport!=0)TransportQueries[Query+1]=float4(Bary,Distance,Ambiguous);
         if(Hit<0)
         {
             float3 Environment=3.14159265359*AnalyticEnvironment;
@@ -228,7 +281,8 @@ void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
         if(ReuseTransport!=0)
         {
             TransportQueries[Query]=float4(Direct,float(Hit));
-            TransportQueries[Query+1]=float4(Bary,0,0);
+            TransportQueries[Query+1]=float4(Bary,Distance,Ambiguous);
+            if(QueryStride==3)TransportQueries[Query+2]=float4(HP+HNg*HBias,HBias);
         }
         Sum+=Rho*(Direct+CachedIrradiance(Hit,Bary));
     }
