@@ -1,0 +1,1281 @@
+{
+  "date": "2026-11-05",
+  "build_suffix": 6178,
+  "hardware": {
+    "cpu": "Intel Core i9-14900KF",
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "driver": "32.0.16.1074"
+  },
+  "automation": {
+    "passed": 21,
+    "failed": 0,
+    "cache_analytic_subcases": 24
+  },
+  "configuration": {
+    "rooms": 3,
+    "cache_iterations": 5,
+    "cache_rays": 64,
+    "cache_batch": 256,
+    "cache_batches_per_submit": 8,
+    "probe_rays": 256,
+    "probe_batch": 32,
+    "transport_budget_MiB_per_room": 64,
+    "irradiance_budget_MiB_per_room": 16,
+    "camera": {
+      "location": [
+        -850,
+        -100,
+        470
+      ],
+      "rotation_pitch_yaw_roll": [
+        -6,
+        38,
+        0
+      ]
+    },
+    "profile_internal_resolution": [
+      1879,
+      803
+    ],
+    "profile_output_resolution": [
+      3309,
+      1414
+    ]
+  },
+  "quality": {
+    "move": {
+      "a": "move",
+      "b": "move_full",
+      "relative_l2": 1.2851673561454629e-09,
+      "peak_normalized_max": 1.0115079291603649e-08,
+      "absolute_max": 0.0039000000033411197,
+      "byte_exact": false,
+      "per_room": {
+        "PRTProbeVolume_1": {
+          "relative_l2": 8.918370031856242e-09,
+          "peak_normalized_max": 5.292965990809947e-08,
+          "absolute_max": 0.0039000000033411197
+        },
+        "PRTProbeVolume_2": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_4": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        }
+      },
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=0 Instances=15 Triangles=648 Probes=512 Generation=3 Discarded=1 Pending=0 Published=1 ChartUpdates=1 SnapshotMs=0.860 ConvergenceSeconds=3.454 PartialProbes=512 PartialUpdates=16 FirstPartialSeconds=1.448 Error= SurfelRevision=2 SurfelOwners=15 SurfelLive=2712 SurfelCapacity=4096 SurfelUpdated=1 SurfelRetired=0 GridBuckets=1024 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 PendingMaskedProbes=0 LightingGeometryCurrent=1 CacheBatchesPerSubmit=8 CacheSweep=5/5 CacheOffset=0 CachePhase=0 Submissions=26 TransportReuse=1 TransportBytes=8331264 TransportRetained=1 RegionalReuse=1 QueriesReused=161588 QueriesRebuilt=11980 IrradianceReuse=1 IrradianceHistoryBytes=327680 IrradianceReused=5616 IrradianceRebuilt=7944 HeldIrradianceHistoryBytes=0"
+    },
+    "rotate": {
+      "a": "rotate",
+      "b": "rotate_full",
+      "relative_l2": 2.0567222682294694e-09,
+      "peak_normalized_max": 2.0230158564336304e-08,
+      "absolute_max": 0.007799999999406282,
+      "byte_exact": false,
+      "per_room": {
+        "PRTProbeVolume_1": {
+          "relative_l2": 1.4287449822555396e-08,
+          "peak_normalized_max": 1.0591929058428976e-07,
+          "absolute_max": 0.007799999999406282
+        },
+        "PRTProbeVolume_2": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_4": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        }
+      },
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=0 Instances=15 Triangles=648 Probes=512 Generation=6 Discarded=1 Pending=0 Published=1 ChartUpdates=1 SnapshotMs=0.848 ConvergenceSeconds=3.496 PartialProbes=512 PartialUpdates=16 FirstPartialSeconds=1.490 Error= SurfelRevision=3 SurfelOwners=15 SurfelLive=2712 SurfelCapacity=4096 SurfelUpdated=1 SurfelRetired=0 GridBuckets=1024 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 PendingMaskedProbes=0 LightingGeometryCurrent=1 CacheBatchesPerSubmit=8 CacheSweep=5/5 CacheOffset=0 CachePhase=0 Submissions=26 TransportReuse=1 TransportBytes=8331264 TransportRetained=1 RegionalReuse=1 QueriesReused=161859 QueriesRebuilt=11709 IrradianceReuse=1 IrradianceHistoryBytes=327680 IrradianceReused=5711 IrradianceRebuilt=7849 HeldIrradianceHistoryBytes=0"
+    },
+    "add": {
+      "a": "add",
+      "b": "add_full",
+      "relative_l2": 0.0,
+      "peak_normalized_max": 0.0,
+      "absolute_max": 0.0,
+      "byte_exact": true,
+      "per_room": {
+        "PRTProbeVolume_1": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_2": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_4": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        }
+      },
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=0 Instances=16 Triangles=660 Probes=512 Generation=9 Discarded=1 Pending=0 Published=1 ChartUpdates=1 SnapshotMs=0.598 ConvergenceSeconds=3.399 PartialProbes=512 PartialUpdates=16 FirstPartialSeconds=1.386 Error= SurfelRevision=4 SurfelOwners=16 SurfelLive=2820 SurfelCapacity=4096 SurfelUpdated=1 SurfelRetired=0 GridBuckets=1024 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 PendingMaskedProbes=0 LightingGeometryCurrent=1 CacheBatchesPerSubmit=8 CacheSweep=5/5 CacheOffset=0 CachePhase=0 Submissions=26 TransportReuse=1 TransportBytes=8663040 TransportRetained=1 RegionalReuse=0 QueriesReused=0 QueriesRebuilt=180480 IrradianceReuse=0 IrradianceHistoryBytes=327680 IrradianceReused=0 IrradianceRebuilt=14100 HeldIrradianceHistoryBytes=0"
+    },
+    "delete": {
+      "a": "delete",
+      "b": "delete_full",
+      "relative_l2": 0.0,
+      "peak_normalized_max": 0.0,
+      "absolute_max": 0.0,
+      "byte_exact": true,
+      "per_room": {
+        "PRTProbeVolume_1": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_2": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_4": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        }
+      },
+      "status": "RuntimeReference=1 Assets=32 AssetBuilds=0 Instances=15 Triangles=648 Probes=512 Generation=12 Discarded=1 Pending=0 Published=1 ChartUpdates=0 SnapshotMs=0.582 ConvergenceSeconds=3.352 PartialProbes=512 PartialUpdates=16 FirstPartialSeconds=1.437 Error= SurfelRevision=5 SurfelOwners=15 SurfelLive=2712 SurfelCapacity=4096 SurfelUpdated=0 SurfelRetired=1 GridBuckets=1024 AuditPending=0 SurfelError= LastAudit=[] SurfelCache=1 CacheIterations=5 CacheRays=64 CacheRelaxation=1.000 CacheRetained=1 HoldingLighting=0 PendingMaskedProbes=0 LightingGeometryCurrent=1 CacheBatchesPerSubmit=8 CacheSweep=5/5 CacheOffset=0 CachePhase=0 Submissions=26 TransportReuse=1 TransportBytes=8331264 TransportRetained=1 RegionalReuse=0 QueriesReused=0 QueriesRebuilt=173568 IrradianceReuse=0 IrradianceHistoryBytes=327680 IrradianceReused=0 IrradianceRebuilt=13560 HeldIrradianceHistoryBytes=0"
+    }
+  },
+  "room_isolation": true,
+  "budget_tests": [
+    "zero: no old or new irradiance history; queries still reused",
+    "600B: new 512B history fits, old history not retained",
+    "normal budget: original shared history remains reusable"
+  ],
+  "memory": {
+    "retained_query_bytes_three_rooms": 42283008,
+    "retained_irradiance_history_bytes_three_rooms": 1638400,
+    "pending_classic_old_plus_new_irradiance_and_masks_bytes": 668800,
+    "process_samples": [
+      {
+        "shared": 253845504,
+        "time": "2026-11-05T07:01:40.3822648Z",
+        "dedicated": 3550150656
+      },
+      {
+        "shared": 253845504,
+        "time": "2026-11-05T07:01:45.4884449Z",
+        "dedicated": 3550158848
+      },
+      {
+        "shared": 253845504,
+        "time": "2026-11-05T07:01:49.9314308Z",
+        "dedicated": 3550167040
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:01:56.0648585Z",
+        "dedicated": 3584483328
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:01:59.2599761Z",
+        "dedicated": 3584184320
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:02:01.3148085Z",
+        "dedicated": 3584786432
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:02:03.9213220Z",
+        "dedicated": 3584188416
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:02:06.8676875Z",
+        "dedicated": 3583471616
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:02:12.4931692Z",
+        "dedicated": 3584487424
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:02:15.9689673Z",
+        "dedicated": 3550769152
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:02:20.2300465Z",
+        "dedicated": 3550769152
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:02:22.9516972Z",
+        "dedicated": 3549614080
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:02:24.7039003Z",
+        "dedicated": 3550171136
+      },
+      {
+        "shared": 254107648,
+        "time": "2026-11-05T07:02:27.9085393Z",
+        "dedicated": 3550765056
+      },
+      {
+        "shared": 258301952,
+        "time": "2026-11-05T07:02:30.6859836Z",
+        "dedicated": 3550777344
+      }
+    ],
+    "sampled_dedicated_peak_bytes": 3584786432
+  },
+  "limitations": [
+    "Editor observations with other desktop applications running; not isolated shipping-build benchmarks.",
+    "Process GPU memory samples include all engine resources and may miss peaks.",
+    "Full dispatch and dependency scans remain; skipped irradiance evaluations are not a frame speedup.",
+    "Comparison reference is the full iterative Surfel solver, not ground-truth path tracing.",
+    "No mobile validation."
+  ],
+  "latency_samples": [
+    {
+      "turn": 0,
+      "mode": "full",
+      "ConvergenceSeconds": 3.346,
+      "FirstPartialSeconds": 0.0,
+      "SnapshotMs": 0.433,
+      "Submissions": 26.0,
+      "TransportBytes": 5554176.0,
+      "IrradianceHistoryBytes": 0.0,
+      "IrradianceReused": 0.0,
+      "IrradianceRebuilt": 0.0,
+      "QueriesReused": 0.0,
+      "QueriesRebuilt": 0.0
+    },
+    {
+      "turn": 0,
+      "mode": "query",
+      "ConvergenceSeconds": 3.4,
+      "FirstPartialSeconds": 0.0,
+      "SnapshotMs": 0.61,
+      "Submissions": 26.0,
+      "TransportBytes": 8331264.0,
+      "IrradianceHistoryBytes": 0.0,
+      "IrradianceReused": 0.0,
+      "IrradianceRebuilt": 0.0,
+      "QueriesReused": 161634.0,
+      "QueriesRebuilt": 11934.0
+    },
+    {
+      "turn": 0,
+      "mode": "regional",
+      "ConvergenceSeconds": 3.431,
+      "FirstPartialSeconds": 1.435,
+      "SnapshotMs": 0.545,
+      "Submissions": 26.0,
+      "TransportBytes": 8331264.0,
+      "IrradianceHistoryBytes": 327680.0,
+      "IrradianceReused": 5618.0,
+      "IrradianceRebuilt": 7942.0,
+      "QueriesReused": 161634.0,
+      "QueriesRebuilt": 11934.0
+    },
+    {
+      "turn": 1,
+      "mode": "regional",
+      "ConvergenceSeconds": 3.426,
+      "FirstPartialSeconds": 1.421,
+      "SnapshotMs": 0.798,
+      "Submissions": 26.0,
+      "TransportBytes": 8331264.0,
+      "IrradianceHistoryBytes": 327680.0,
+      "IrradianceReused": 5618.0,
+      "IrradianceRebuilt": 7942.0,
+      "QueriesReused": 161634.0,
+      "QueriesRebuilt": 11934.0
+    },
+    {
+      "turn": 1,
+      "mode": "full",
+      "ConvergenceSeconds": 3.471,
+      "FirstPartialSeconds": 0.0,
+      "SnapshotMs": 0.431,
+      "Submissions": 26.0,
+      "TransportBytes": 5554176.0,
+      "IrradianceHistoryBytes": 0.0,
+      "IrradianceReused": 0.0,
+      "IrradianceRebuilt": 0.0,
+      "QueriesReused": 0.0,
+      "QueriesRebuilt": 0.0
+    },
+    {
+      "turn": 1,
+      "mode": "query",
+      "ConvergenceSeconds": 3.482,
+      "FirstPartialSeconds": 0.0,
+      "SnapshotMs": 0.833,
+      "Submissions": 26.0,
+      "TransportBytes": 8331264.0,
+      "IrradianceHistoryBytes": 0.0,
+      "IrradianceReused": 0.0,
+      "IrradianceRebuilt": 0.0,
+      "QueriesReused": 161634.0,
+      "QueriesRebuilt": 11934.0
+    },
+    {
+      "turn": 2,
+      "mode": "query",
+      "ConvergenceSeconds": 3.399,
+      "FirstPartialSeconds": 0.0,
+      "SnapshotMs": 0.657,
+      "Submissions": 26.0,
+      "TransportBytes": 8331264.0,
+      "IrradianceHistoryBytes": 0.0,
+      "IrradianceReused": 0.0,
+      "IrradianceRebuilt": 0.0,
+      "QueriesReused": 161634.0,
+      "QueriesRebuilt": 11934.0
+    },
+    {
+      "turn": 2,
+      "mode": "regional",
+      "ConvergenceSeconds": 3.427,
+      "FirstPartialSeconds": 1.423,
+      "SnapshotMs": 0.465,
+      "Submissions": 26.0,
+      "TransportBytes": 8331264.0,
+      "IrradianceHistoryBytes": 327680.0,
+      "IrradianceReused": 5618.0,
+      "IrradianceRebuilt": 7942.0,
+      "QueriesReused": 161634.0,
+      "QueriesRebuilt": 11934.0
+    },
+    {
+      "turn": 2,
+      "mode": "full",
+      "ConvergenceSeconds": 4.197,
+      "FirstPartialSeconds": 0.0,
+      "SnapshotMs": 0.855,
+      "Submissions": 26.0,
+      "TransportBytes": 5554176.0,
+      "IrradianceHistoryBytes": 0.0,
+      "IrradianceReused": 0.0,
+      "IrradianceRebuilt": 0.0,
+      "QueriesReused": 0.0,
+      "QueriesRebuilt": 0.0
+    }
+  ],
+  "latency_summary": {
+    "full": {
+      "ConvergenceSeconds": {
+        "min": 3.346,
+        "median": 3.471,
+        "max": 4.197
+      },
+      "FirstPartialSeconds": {
+        "min": 0.0,
+        "median": 0.0,
+        "max": 0.0
+      },
+      "SnapshotMs": {
+        "min": 0.431,
+        "median": 0.433,
+        "max": 0.855
+      }
+    },
+    "query": {
+      "ConvergenceSeconds": {
+        "min": 3.399,
+        "median": 3.4,
+        "max": 3.482
+      },
+      "FirstPartialSeconds": {
+        "min": 0.0,
+        "median": 0.0,
+        "max": 0.0
+      },
+      "SnapshotMs": {
+        "min": 0.61,
+        "median": 0.657,
+        "max": 0.833
+      }
+    },
+    "regional": {
+      "ConvergenceSeconds": {
+        "min": 3.426,
+        "median": 3.427,
+        "max": 3.431
+      },
+      "FirstPartialSeconds": {
+        "min": 1.421,
+        "median": 1.423,
+        "max": 1.435
+      },
+      "SnapshotMs": {
+        "min": 0.465,
+        "median": 0.545,
+        "max": 0.798
+      }
+    }
+  },
+  "gpu_pass_samples": {
+    "full": {
+      "build": {
+        "count": 0,
+        "min_ms": null,
+        "median_ms": null,
+        "max_ms": null
+      },
+      "sweep": {
+        "count": 16,
+        "min_ms": 0.005,
+        "median_ms": 0.006,
+        "max_ms": 0.01
+      },
+      "mask": {
+        "count": 0,
+        "min_ms": null,
+        "median_ms": null,
+        "max_ms": null
+      },
+      "projection": {
+        "count": 0,
+        "min_ms": null,
+        "median_ms": null,
+        "max_ms": null
+      },
+      "resolve": {
+        "count": 22,
+        "min_ms": 7.553,
+        "median_ms": 12.745000000000001,
+        "max_ms": 24.383
+      }
+    },
+    "query": {
+      "build": {
+        "count": 0,
+        "min_ms": null,
+        "median_ms": null,
+        "max_ms": null
+      },
+      "sweep": {
+        "count": 8,
+        "min_ms": 0.005,
+        "median_ms": 0.005,
+        "max_ms": 0.012
+      },
+      "mask": {
+        "count": 0,
+        "min_ms": null,
+        "median_ms": null,
+        "max_ms": null
+      },
+      "projection": {
+        "count": 0,
+        "min_ms": null,
+        "median_ms": null,
+        "max_ms": null
+      },
+      "resolve": {
+        "count": 8,
+        "min_ms": 9.88,
+        "median_ms": 12.949,
+        "max_ms": 16.697
+      }
+    },
+    "regional": {
+      "build": {
+        "count": 3,
+        "min_ms": 0.057,
+        "median_ms": 0.069,
+        "max_ms": 0.07
+      },
+      "sweep": {
+        "count": 16,
+        "min_ms": 0.006,
+        "median_ms": 0.007,
+        "max_ms": 0.013
+      },
+      "mask": {
+        "count": 1,
+        "min_ms": 0.003,
+        "median_ms": 0.003,
+        "max_ms": 0.003
+      },
+      "projection": {
+        "count": 1,
+        "min_ms": 0.606,
+        "median_ms": 0.606,
+        "max_ms": 0.606
+      },
+      "resolve": {
+        "count": 22,
+        "min_ms": 7.851,
+        "median_ms": 12.8475,
+        "max_ms": 16.365
+      }
+    }
+  },
+  "gpu_profile_frames": [
+    {
+      "mode": "full",
+      "turn": 0,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 23.441
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": 0,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 16.655
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": 1,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 24.383
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": 1,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 21.649
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": 2,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 10.638
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.01
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": 2,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 22.412
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": 3,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 21.18
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": 3,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 23.769
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.009
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.008
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        }
+      ]
+    },
+    {
+      "mode": "query",
+      "turn": 0,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.371
+        }
+      ]
+    },
+    {
+      "mode": "query",
+      "turn": 0,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.978
+        }
+      ]
+    },
+    {
+      "mode": "query",
+      "turn": 1,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 16.697
+        }
+      ]
+    },
+    {
+      "mode": "query",
+      "turn": 1,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.959
+        }
+      ]
+    },
+    {
+      "mode": "query",
+      "turn": 2,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 9.88
+        }
+      ]
+    },
+    {
+      "mode": "query",
+      "turn": 2,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.748
+        }
+      ]
+    },
+    {
+      "mode": "query",
+      "turn": 3,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 13.801
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.012
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.005
+        }
+      ]
+    },
+    {
+      "mode": "query",
+      "turn": 3,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.939
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": 0,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 14.166
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": 0,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 11.036
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": 1,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.637
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": 1,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 15.454
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": 2,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 13.531
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=1                                                                                                 \u2503",
+          "ms": 0.07
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=1                                                                                                 \u2503",
+          "ms": 0.069
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=1                                                                                                 \u2503",
+          "ms": 0.057
+        },
+        {
+          "event": "PRT Irradiance Dependency Mask",
+          "ms": 0.003
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": 2,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 15.945
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": 3,
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.835
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.013
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.006
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.01
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": 3,
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 13.521
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 13.266
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 10.183
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 2,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 11.679
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 3,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 9.299
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 4,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.856
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 5,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 13.206
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 6,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.53
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 7,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 7.719
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 8,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.134
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 9,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.706
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 10,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.784
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 11,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.009
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 12,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 7.553
+        }
+      ]
+    },
+    {
+      "mode": "full",
+      "turn": "continuous",
+      "sample": 13,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 9.911
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 0,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 9.584
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 1,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.434
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.013
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.009
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.01
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        },
+        {
+          "event": "PRT Surfel Irradiance Sweep Reuse=1 Build=0                                                                                                 \u2503",
+          "ms": 0.007
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 2,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 13.641
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 3,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 11.744
+        },
+        {
+          "event": "PRT Runtime Probe Transport Cache=1                                                                                                         \u2503",
+          "ms": 0.606
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 4,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 16.365
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 5,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 15.949
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 6,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 8.229
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 7,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 10.536
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 8,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 15.441
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 9,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 15.57
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 10,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.734
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 11,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 7.851
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 12,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 12.86
+        }
+      ]
+    },
+    {
+      "mode": "regional",
+      "turn": "continuous",
+      "sample": 13,
+      "events": [
+        {
+          "event": "PRTGI Apply Diffuse Indirect",
+          "ms": 10.501
+        }
+      ]
+    }
+  ],
+  "gpu_method": "ProfileGPU individual pass samples from 52 frames across updates; not whole-job GPU totals. Different modes can capture different sweep offsets; no direct speedup inferred. Latency tests do not run ProfileGPU."
+}

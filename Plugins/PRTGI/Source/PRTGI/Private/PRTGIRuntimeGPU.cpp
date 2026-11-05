@@ -158,12 +158,22 @@ void FRuntimeGPU::Submit(TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Sce
     State->ReuseIrradiance=State->RecordIrradiance && State->History && State->History->IrradianceBytes>0 &&
         State->History->Iterations==Scene->CacheIterations && State->History->Relaxation==Scene->CacheRelaxation &&
         State->History->Environment==Scene->AnalyticEnvironment && State->History->IrradianceBytes+IrrBytes+MaskBytes<=Scene->IrradianceBudgetBytes;
+    if(State->History && !State->ReuseIrradiance)
+    {
+        // Keep only query data when the old irradiance does not fit. Do not
+        // mutate the caller's history: another job may still be using it.
+        auto QueriesOnly=MakeShared<FRuntimeTransportHistory,ESPMode::ThreadSafe>();
+        QueriesOnly->Surface=History->Surface;QueriesOnly->Rays=History->Rays;QueriesOnly->Bytes=History->Bytes;
+        ENQUEUE_RENDER_COMMAND(PRTFilterTransportHistory)([History,QueriesOnly](FRHICommandListImmediate&)
+        {QueriesOnly->Queries=History->Queries;});
+        State->History=QueriesOnly;
+    }
 }
 const TArray<FVector4f>& FRuntimeGPU::CacheResultForTest()const { return State->CacheResult; }
 FString FRuntimeGPU::Progress()const
 {
     const auto& S=*State;
-    return FString::Printf(TEXT("CacheSweep=%d/%d CacheOffset=%d CachePhase=%d Submissions=%d TransportReuse=%d TransportBytes=%llu TransportRetained=%d RegionalReuse=%d QueriesReused=%u QueriesRebuilt=%u IrradianceReuse=%d IrradianceHistoryBytes=%llu IrradianceReused=%u IrradianceRebuilt=%u"),S.Iteration,S.Scene?S.Scene->CacheIterations:0,S.CacheOffset,S.CachePhase,S.Submissions,S.ReuseTransport,S.TransportBytes,S.ReuseTransport && (!S.ScratchReleased || S.Scene->RegionalTransport),S.RegionalReuse,S.ReusedQueries,S.RebuiltQueries,S.ReuseIrradiance,S.IrradianceBytes,S.ReusedIrradiance,S.RebuiltIrradiance);
+    return FString::Printf(TEXT("CacheSweep=%d/%d CacheOffset=%d CachePhase=%d Submissions=%d TransportReuse=%d TransportBytes=%llu TransportRetained=%d RegionalReuse=%d QueriesReused=%u QueriesRebuilt=%u IrradianceReuse=%d IrradianceHistoryBytes=%llu IrradianceReused=%u IrradianceRebuilt=%u HeldIrradianceHistoryBytes=%llu"),S.Iteration,S.Scene?S.Scene->CacheIterations:0,S.CacheOffset,S.CachePhase,S.Submissions,S.ReuseTransport,S.TransportBytes,S.ReuseTransport && (!S.ScratchReleased || S.Scene->RegionalTransport),S.RegionalReuse,S.ReusedQueries,S.RebuiltQueries,S.ReuseIrradiance,S.IrradianceBytes,S.ReusedIrradiance,S.RebuiltIrradiance,S.History?S.History->IrradianceBytes:0ull);
 }
 void FRuntimeGPU::RetainCacheAndReleaseScratch()
 {

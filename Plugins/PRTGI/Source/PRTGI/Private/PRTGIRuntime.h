@@ -88,8 +88,9 @@ public:
     void Submit(TSharedPtr<const FRuntimeScene, ESPMode::ThreadSafe> Scene, int32 Budget,
         TSharedPtr<FRuntimeTransportHistory,ESPMode::ThreadSafe> History=nullptr);
     TSharedPtr<FRuntimeTransportHistory,ESPMode::ThreadSafe> CaptureTransportHistory() const;
-    // Schedules at most one bounded submission per tick. Publication is atomic for
-    // the whole scene; a caller must reject obsolete layout/light generations.
+    // Schedules at most one bounded submission per tick. Tick returns the final
+    // scene; TakePartial exposes optional completed ranges. Callers must reject
+    // obsolete layout/light generations before publishing either result.
     bool Tick(TArray<FVector4f>& Output, bool bAllowSubmission=true);
     bool HasPendingSubmission() const;
     bool TakePartial(TArray<FVector4f>& Output,int32& First);

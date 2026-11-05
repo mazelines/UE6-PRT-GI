@@ -203,6 +203,8 @@ public:
                 if(Stage==18)Scene->ChangedBounds=FBox3f(FVector3f(-20000000,-20000000,-3),FVector3f(20000000,20000000,-2));
             }
             if(Stage==14)Scene->TransportBudgetBytes=0;
+            if(Stage==21)Scene->IrradianceBudgetBytes=0;
+            if(Stage==22)Scene->IrradianceBudgetBytes=600; // New 512B history fits; old+new does not.
             Scene->CacheRays=64;Scene->Rays=1024;Scene->Probes={FVector4f(0,0,1,1)};
             Scene->AnalyticEnvironment=Case==4?FVector3f(0):FVector3f(2,3,5);
             if(Case!=4)Scene->Lights={FVector4f(0,0,1,0),FVector4f(2*UE_PI,2*UE_PI,2*UE_PI,0)};
@@ -249,15 +251,22 @@ public:
         if(Stage==16)Test->TestTrue(TEXT("Changed bounds invalidate all ray segments"),GPU->Progress().Contains(TEXT("QueriesReused=0 QueriesRebuilt=192")));
         if(Stage==17)Test->TestTrue(TEXT("Shadow segments invalidate hits outside the changed region"),GPU->Progress().Contains(TEXT("QueriesReused=0 QueriesRebuilt=192")));
         if(Stage==18)Test->TestTrue(TEXT("Geometry behind first hits does not invalidate queries"),GPU->Progress().Contains(TEXT("QueriesReused=192 QueriesRebuilt=0")));
-        if(Stage==15 || Stage==18 || Stage==20)
+        if(Stage==15 || Stage==18 || Stage==20 || Stage==23)
             Test->TestTrue(TEXT("Unchanged second sweep reuses all irradiance"),GPU->Progress().Contains(TEXT("IrradianceReused=3 IrradianceRebuilt=3")));
+        if(Stage==21 || Stage==22)
+        {
+            Test->TestTrue(TEXT("Budget fallback drops old irradiance ownership"),GPU->Progress().Contains(TEXT("HeldIrradianceHistoryBytes=0")));
+            Test->TestTrue(TEXT("Budget fallback still reuses queries"),GPU->Progress().Contains(TEXT("QueriesReused=192 QueriesRebuilt=0")));
+            Test->TestTrue(TEXT("Budget fallback evaluates all sweeps"),GPU->Progress().Contains(TEXT("IrradianceReused=0 IrradianceRebuilt=0")) || GPU->Progress().Contains(TEXT("IrradianceReused=0 IrradianceRebuilt=6")));
+            Test->TestTrue(TEXT("Budget selects only new history when it fits"),GPU->Progress().Contains(Stage==21?TEXT("IrradianceHistoryBytes=0"):TEXT("IrradianceHistoryBytes=512")));
+        }
         if(Stage==19)
         {
             Test->TestTrue(TEXT("Receiver queries reused while moved source retraces"),GPU->Progress().Contains(TEXT("QueriesReused=128 QueriesRebuilt=64")));
             Test->TestTrue(TEXT("Changed indirect dependency recomputes second sweep"),GPU->Progress().Contains(TEXT("IrradianceReused=0 IrradianceRebuilt=6")));
             GPU->RetainCacheAndReleaseScratch();History=GPU->CaptureTransportHistory();
         }
-        GPU.Reset();++Stage;return Stage==21;
+        GPU.Reset();++Stage;return Stage==24;
     }
 private:
     FAutomationTestBase* Test;
