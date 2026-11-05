@@ -1,0 +1,109 @@
+{
+  "date": "2026-11-05",
+  "build_suffix": 6176,
+  "automation_passed": 20,
+  "analytic_subcases": 21,
+  "option": "r.PRTGI.Runtime.RegionalIrradiance",
+  "default": 0,
+  "memory_budget_mib_per_room": 16,
+  "comparisons": {
+    "moved": {
+      "a": "moved",
+      "b": "moved_full",
+      "relative_l2": 0.0,
+      "peak_normalized_max": 0.0,
+      "absolute_max": 0.0,
+      "byte_exact": true,
+      "per_room": {
+        "PRTProbeVolume_1": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_2": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_4": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        }
+      }
+    },
+    "rotated": {
+      "a": "rotated",
+      "b": "rotated_full",
+      "relative_l2": 0.0,
+      "peak_normalized_max": 0.0,
+      "absolute_max": 0.0,
+      "byte_exact": true,
+      "per_room": {
+        "PRTProbeVolume_1": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_2": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_4": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        }
+      }
+    },
+    "budget": {
+      "a": "budget",
+      "b": "rotated_full",
+      "relative_l2": 0.0,
+      "peak_normalized_max": 0.0,
+      "absolute_max": 0.0,
+      "byte_exact": true,
+      "per_room": {
+        "PRTProbeVolume_1": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_2": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_4": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        }
+      }
+    }
+  },
+  "counters": {
+    "moved": {
+      "QueriesReused": 161588,
+      "QueriesRebuilt": 11980,
+      "IrradianceHistoryBytes": 327680,
+      "IrradianceReused": 5616,
+      "IrradianceRebuilt": 7944
+    },
+    "rotated": {
+      "QueriesReused": 161867,
+      "QueriesRebuilt": 11701,
+      "IrradianceHistoryBytes": 327680,
+      "IrradianceReused": 5716,
+      "IrradianceRebuilt": 7844
+    }
+  },
+  "method": "Full per-sweep history; immutable queries plus source-dirty and prior-sweep triangle dependency masks. First sweep always evaluated. Comparison disables only irradiance reuse, retaining the same query path.",
+  "limitations": [
+    "Still dispatches all active surfels; skips irradiance evaluation, not a compact work queue.",
+    "Triangle-level dependencies are conservative.",
+    "Old and new histories plus masks are bounded separately from transport queries.",
+    "No frame-time speedup inferred from skipped evaluations."
+  ]
+}

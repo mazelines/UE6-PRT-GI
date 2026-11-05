@@ -46,6 +46,8 @@ TAutoConsoleVariable<int32> RoomsEnabled(TEXT("r.PRTGI.Runtime.Rooms"),0,TEXT("O
 TAutoConsoleVariable<int32> ReuseTransport(TEXT("r.PRTGI.Runtime.ReuseTransport"),0,TEXT("Cache ray hits and direct irradiance within one immutable lighting generation. Retrace after geometry/light changes. Experimental PC memory/performance tradeoff."));
 TAutoConsoleVariable<int32> TransportBudgetMB(TEXT("r.PRTGI.Runtime.TransportBudgetMB"),64,TEXT("0..512 MiB per room/job for transport queries; 32 bytes per ray, or 48 for regional history. Regional reuse also budgets the old table. Over-budget jobs fall back; regional histories remain after projection."));
 TAutoConsoleVariable<int32> RegionalTransport(TEXT("r.PRTGI.Runtime.RegionalTransport"),0,TEXT("Opt-in retained transport queries. Retrace rays intersecting changed instance bounds or their shadow segments. Same participants/materials/lights and stable surface slots required. Irradiance still recomputed globally within each affected room."));
+TAutoConsoleVariable<int32> RegionalIrradiance(TEXT("r.PRTGI.Runtime.RegionalIrradiance"),0,TEXT("Opt-in exact per-sweep history reuse. Recompute sources whose operator or previous-sweep triangle dependencies changed. Implies RegionalTransport; requires a completed compatible history."));
+TAutoConsoleVariable<int32> IrradianceBudgetMB(TEXT("r.PRTGI.Runtime.IrradianceBudgetMB"),16,TEXT("0..256 MiB per room for additional per-sweep irradiance histories and dirty masks. Reuse budgets both old and new histories; fall back to full sweeps if insufficient."));
 bool NeedsSurfelPool() { return SurfelPoolEnabled.GetValueOnGameThread()!=0 || UseSurfelCache.GetValueOnGameThread()!=0; }
 struct FHash
 {
@@ -302,7 +304,8 @@ uint32 Signature(const TArray<FInstance>& Items,const FRuntimeScene& Scene,uint3
     for(const auto& L:Scene.Lights)H.Add(L);
     H.Add(Scene.Rays);H.Add(Scene.Bounces);H.Add(UseSurfelCache.GetValueOnGameThread());
     H.Add(Scene.CacheIterations);H.Add(Scene.CacheRays);H.Add(Scene.CacheBatch);H.Add(Scene.CacheRelaxation);H.Add(Scene.CacheBatchesPerSubmit);H.Add(KeepLighting.GetValueOnGameThread());
-    H.Add(KeepGeometryLighting.GetValueOnGameThread());H.Add(Scene.RegionalTransport);H.Add(Scene.ReuseTransport);H.Add(Scene.TransportBudgetBytes);return H.Value;
+    H.Add(KeepGeometryLighting.GetValueOnGameThread());H.Add(Scene.RegionalTransport);H.Add(Scene.ReuseTransport);H.Add(Scene.TransportBudgetBytes);
+    H.Add(Scene.RegionalIrradiance);H.Add(Scene.IrradianceBudgetBytes);return H.Value;
 }
 void SetVolumeStatus(UWorld* World,const FString& Message,const TArray<FPRTGIRenderVolume>& Published,int32 BounceCount,const APRTProbeVolume* Room)
 {
@@ -481,7 +484,9 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
     Scene->CacheBatch=FMath::Clamp(CacheBatch.GetValueOnGameThread(),32,1024);
     Scene->CacheBatchesPerSubmit=FMath::Clamp(CacheBatchesPerSubmit.GetValueOnGameThread(),1,32);
     Scene->CacheRelaxation=FMath::Clamp(CacheRelaxation.GetValueOnGameThread(),.1f,1.f);
-    Scene->RegionalTransport=RegionalTransport.GetValueOnGameThread()!=0;
+    Scene->RegionalIrradiance=RegionalIrradiance.GetValueOnGameThread()!=0;
+    Scene->IrradianceBudgetBytes=uint64(FMath::Clamp(IrradianceBudgetMB.GetValueOnGameThread(),0,256))*1024*1024;
+    Scene->RegionalTransport=RegionalTransport.GetValueOnGameThread()!=0 || Scene->RegionalIrradiance;
     Scene->ReuseTransport=ReuseTransport.GetValueOnGameThread()!=0 || Scene->RegionalTransport;
     Scene->TransportBudgetBytes=uint64(FMath::Clamp(TransportBudgetMB.GetValueOnGameThread(),0,512))*1024*1024;
     FString Error;

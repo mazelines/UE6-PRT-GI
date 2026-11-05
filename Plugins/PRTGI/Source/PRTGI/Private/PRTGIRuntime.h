@@ -42,9 +42,14 @@ struct FRuntimeSurfelSnapshot;
 struct FRuntimeTransportHistory
 {
     TRefCountPtr<FRDGPooledBuffer> Queries;
+    TRefCountPtr<FRDGPooledBuffer> IrradianceHistory;
     TSharedPtr<FRuntimeSurfelSnapshot,ESPMode::ThreadSafe> Surface;
     uint64 Bytes=0;
     int32 Rays=0;
+    uint64 IrradianceBytes=0;
+    int32 Iterations=0;
+    float Relaxation=1;
+    FVector3f Environment=FVector3f::ZeroVector;
     ~FRuntimeTransportHistory();
 };
 struct FRuntimeScene
@@ -60,6 +65,8 @@ struct FRuntimeScene
     float CacheRelaxation=1.f;
     bool ReuseTransport=false;
     bool RegionalTransport=false;
+    bool RegionalIrradiance=false;
+    uint64 IrradianceBudgetBytes=16ull*1024*1024;
     FBox3f ChangedBounds{ForceInit};
     TArray<uint32> OldToNewTriangles;
     uint64 TransportBudgetBytes=64ull*1024*1024;

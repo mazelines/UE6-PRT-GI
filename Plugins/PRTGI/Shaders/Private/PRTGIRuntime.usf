@@ -34,6 +34,15 @@ StructuredBuffer<float4> OldSurfacePool;
 StructuredBuffer<uint> OldToNewTriangles;
 RWStructuredBuffer<uint> QueryStats;
 float3 AnalyticEnvironment;
+uint RecordIrradiance;
+uint ReuseIrradiance;
+uint SurfaceCapacity;
+uint TriangleCount;
+StructuredBuffer<float4> OldIrradianceHistory;
+RWStructuredBuffer<float4> IrradianceHistory;
+RWStructuredBuffer<uint> SourceDirty;
+RWStructuredBuffer<uint> DirtyTriangles;
+groupshared uint DirtyGroupFlag;
 
 bool BoxHit(float3 O, float3 D, float3 Min, float3 Max, float Limit)
 {
@@ -226,6 +235,35 @@ void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
 {
     uint Active=CacheOffset+Group.x;if(Active>=CacheActiveCount)return;
     uint Slot=ActiveSlots[Active];float3 P=SurfacePool[Slot*4].xyz;
+    if(RecordIrradiance!=0)
+    {
+        if(Lane==0)DirtyGroupFlag=0;
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if(ReuseIrradiance!=0 && CacheIteration>0)
+    {
+        if(Lane==0)DirtyGroupFlag=SourceDirty[Active] |
+            uint(CacheRelaxation<1 && any(PreviousIrradiance[Slot].rgb!=OldIrradianceHistory[(CacheIteration-1)*SurfaceCapacity+Slot].rgb));
+        GroupMemoryBarrierWithGroupSync();
+        // Triangle-level masks conservatively include every interpolation seed,
+        // including changes far outside the edited object's geometric bounds.
+        [loop]for(uint Ray=Lane;Ray<CacheRayCount;Ray+=64)
+        {
+            int Hit=int(TransportQueries[(Active*CacheRayCount+Ray)*QueryStride].w);
+            if(Hit>=0 && DirtyTriangles[Hit]!=0)InterlockedOr(DirtyGroupFlag,1);
+        }
+        GroupMemoryBarrierWithGroupSync();
+        if(DirtyGroupFlag==0)
+        {
+            if(Lane==0)
+            {
+                float4 Value=OldIrradianceHistory[CacheIteration*SurfaceCapacity+Slot];
+                NextIrradiance[Slot]=Value;IrradianceHistory[CacheIteration*SurfaceCapacity+Slot]=Value;
+                InterlockedAdd(QueryStats[2],1);
+            }
+            return;
+        }
+    }
     float3 N=SurfacePool[Slot*4+1].xyz,Ng=SurfacePool[Slot*4+3].xyz;
     float Bias=max(.02,4*1.1920929e-7*max(max(abs(P.x),abs(P.y)),abs(P.z)));
     float3 Origin=P+Ng*Bias,Sum=0;
@@ -241,6 +279,7 @@ void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
         if(ReuseTransport!=0 && RegionalReuse!=0 && CacheIteration==0)
             Reused=ReuseOldQuery(Slot,Query,Origin,D);
         if(QueryStride==3 && CacheIteration==0)InterlockedAdd(QueryStats[Reused?0:1],1);
+        if(RecordIrradiance!=0 && CacheIteration==0 && !Reused)InterlockedOr(DirtyGroupFlag,1);
         if(ReuseTransport!=0 && (CacheIteration>0 || Reused))
         {
             float4 Record=TransportQueries[Query];int Hit=int(Record.w);
@@ -292,5 +331,33 @@ void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
         if(Lane<Step)Reduction[Lane*9]+=Reduction[(Lane+Step)*9];
         GroupMemoryBarrierWithGroupSync();
     }
-    if(Lane==0)NextIrradiance[Slot]=float4(lerp(PreviousIrradiance[Slot].rgb,Reduction[0]/CacheRayCount,CacheRelaxation),CacheIteration+1);
+    if(Lane==0)
+    {
+        float4 Value=float4(lerp(PreviousIrradiance[Slot].rgb,Reduction[0]/CacheRayCount,CacheRelaxation),CacheIteration+1);
+        NextIrradiance[Slot]=Value;
+        if(RecordIrradiance!=0)
+        {
+            if(CacheIteration==0)SourceDirty[Active]=DirtyGroupFlag;
+            IrradianceHistory[CacheIteration*SurfaceCapacity+Slot]=Value;
+            InterlockedAdd(QueryStats[3],1);
+        }
+    }
+}
+
+// Executed only after all batches of a sweep have finished. The next sweep
+// reads these flags; no batch observes partially updated dependencies.
+[numthreads(64,1,1)]
+void DirtyTrianglesCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
+{
+    uint Triangle=Group.x;if(Triangle>=TriangleCount)return;
+    if(Lane==0)DirtyGroupFlag=0;
+    GroupMemoryBarrierWithGroupSync();
+    float4 Binding=SurfelBindings[Triangle];
+    [loop]for(uint I=Lane;I<uint(Binding.z);I+=64)
+    {
+        uint Slot=uint(Binding.x)+I;
+        if(any(NextIrradiance[Slot].rgb!=OldIrradianceHistory[CacheIteration*SurfaceCapacity+Slot].rgb))InterlockedOr(DirtyGroupFlag,1);
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if(Lane==0)DirtyTriangles[Triangle]=DirtyGroupFlag;
 }

@@ -125,6 +125,22 @@ public:
         const int32 Case=Stage>=14?1:Stage%7;
         if(!GPU)
         {
+            if(Stage==19)
+            {
+                // Move only the floor's lighting seed behind the fixed floor.
+                // Its irradiance becomes zero. Receiver ray queries are identical,
+                // but the second sweep must follow the changed triangle dependency.
+                auto ChangedAsset=MakeShared<PRTGI::FRuntimeSurfelAsset,ESPMode::ThreadSafe>();
+                for(int32 I=0;I<3;++I)
+                {
+                    const FVector3f N(0,0,I==0?1.f:-1.f);
+                    ChangedAsset->Seeds.Append({FVector4f(0,0,I==0?-1.f:1.f,0),FVector4f(N,0),FVector4f(1,0,0,0),
+                        FVector4f(0,1,0,0),FVector4f(.5f,.5f,.5f,0),FVector4f(N,0)});
+                }
+                Pool=MakeUnique<PRTGI::FRuntimeSurfelPool>(16,256,32);FString Error;
+                TArray<PRTGI::FRuntimeSurfelInstance> Items{{1,ChangedAsset,FTransform::Identity}};
+                Test->TestTrue(TEXT("Changed dependency fixture"),Pool->Update(Items,Error));Snapshot=Pool->CaptureLightingSnapshot();
+            }
             auto Scene=MakeShared<PRTGI::FRuntimeScene,ESPMode::ThreadSafe>();
             Scene->Geometry=MakeShared<PRTGI::FMultiBounceData,ESPMode::ThreadSafe>();
             constexpr float Size=10000;
@@ -137,7 +153,7 @@ public:
             Iterations=Case==0?1:((Case<3 || Case>=5)?2:8);Alpha=Case==3?.5f:1.f;
             Scene->CacheIterations=Iterations;Scene->CacheRelaxation=Alpha;Scene->CacheBatch=Case==2?256:1;
             Scene->CacheBatchesPerSubmit=Case==5?2:(Case==6?8:1);
-            Scene->ReuseTransport=Stage>=7;Scene->RegionalTransport=Stage>=7;
+            Scene->ReuseTransport=Stage>=7;Scene->RegionalTransport=Stage>=7;Scene->RegionalIrradiance=Stage>=7;
             if(Stage>=15)
             {
                 Scene->OldToNewTriangles={0,1};
@@ -166,7 +182,7 @@ public:
         const float Q=1-Alpha,Power=FMath::Pow(Q,float(Iterations));
         for(int32 C=0;C<3;++C)
         {
-            const float L=Case==4?0:FVector3f(2,3,5)[C];
+            const float L=Case==4 || Stage>=19?0:FVector3f(2,3,5)[C];
             const float Floor=UE_PI*L*(1-Power);
             const float Direct=Case==4?0:UE_PI;
             const float Receiver=Direct*(1-Power)+.5f*UE_PI*L*(1-Power-Iterations*Alpha*FMath::Pow(Q,float(Iterations-1)));
@@ -180,7 +196,7 @@ public:
         if(Case==1)Previous=Cache;
         if(Case==2 || Case>=5)Test->TestTrue(TEXT("Jacobi results independent of batch/submission boundaries"),Cache==Previous);
         if(Stage<7){ExpectedCache.Add(Cache);ExpectedSH.Add(SH);}
-        else
+        else if(Stage<19)
         {
             Test->TestTrue(TEXT("Transport reuse preserves analytic cache exactly"),Cache==ExpectedCache[Case]);
             Test->TestTrue(TEXT("Transport reuse preserves analytic probe SH exactly"),SH==ExpectedSH[Case]);
@@ -192,7 +208,15 @@ public:
         if(Stage==16)Test->TestTrue(TEXT("Changed bounds invalidate all ray segments"),GPU->Progress().Contains(TEXT("QueriesReused=0 QueriesRebuilt=192")));
         if(Stage==17)Test->TestTrue(TEXT("Shadow segments invalidate hits outside the changed region"),GPU->Progress().Contains(TEXT("QueriesReused=0 QueriesRebuilt=192")));
         if(Stage==18)Test->TestTrue(TEXT("Geometry behind first hits does not invalidate queries"),GPU->Progress().Contains(TEXT("QueriesReused=192 QueriesRebuilt=0")));
-        GPU.Reset();++Stage;return Stage==19;
+        if(Stage==15 || Stage==18 || Stage==20)
+            Test->TestTrue(TEXT("Unchanged second sweep reuses all irradiance"),GPU->Progress().Contains(TEXT("IrradianceReused=3 IrradianceRebuilt=3")));
+        if(Stage==19)
+        {
+            Test->TestTrue(TEXT("Receiver queries reused while moved source retraces"),GPU->Progress().Contains(TEXT("QueriesReused=128 QueriesRebuilt=64")));
+            Test->TestTrue(TEXT("Changed indirect dependency recomputes second sweep"),GPU->Progress().Contains(TEXT("IrradianceReused=0 IrradianceRebuilt=6")));
+            GPU->RetainCacheAndReleaseScratch();History=GPU->CaptureTransportHistory();
+        }
+        GPU.Reset();++Stage;return Stage==21;
     }
 private:
     FAutomationTestBase* Test;
