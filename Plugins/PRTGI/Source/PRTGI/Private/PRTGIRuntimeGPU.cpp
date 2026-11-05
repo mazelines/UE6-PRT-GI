@@ -102,6 +102,9 @@ struct FRuntimeGPU::FState
     bool CachePhase=false;
     TAtomic<bool> Ready{false},PollQueued{false};
     TArray<FVector4f> Result;
+    TArray<FVector4f> ReadbackChunk,Partial;
+    int32 ReadbackProbes=0,PartialFirst=0;
+    bool ReadbackFailed=false;
     int32 Offset=0,Budget=32;
     bool Pending=false;
 };
@@ -139,6 +142,7 @@ void FRuntimeGPU::Submit(TSharedPtr<const FRuntimeScene,ESPMode::ThreadSafe> Sce
 {
     check(!State->Scene);State->Scene=Scene;State->Budget=FMath::Clamp(InProbeBudget,1,256);
     State->CachePhase=Scene->SurfelSnapshot && !Scene->SurfelSnapshot->ActiveSlots.IsEmpty();
+    if(Scene->ProgressiveProbes)State->Result.SetNumZeroed(Scene->Probes.Num()*9);
     State->QueryStride=Scene->RegionalTransport?3:2;
     const uint64 Bytes=State->CachePhase?uint64(Scene->SurfelSnapshot->ActiveSlots.Num())*Scene->CacheRays*State->QueryStride*16:0;
     State->ReuseTransport=Scene->ReuseTransport && Scene->CacheIterations>1 && Bytes>0 && Bytes<=Scene->TransportBudgetBytes;
@@ -178,6 +182,11 @@ void FRuntimeGPU::RetainCacheAndReleaseScratch()
     });
 }
 bool FRuntimeGPU::HasPendingSubmission() const { return State->Pending; }
+bool FRuntimeGPU::TakePartial(TArray<FVector4f>& Output,int32& First)
+{
+    if(State->Partial.IsEmpty())return false;
+    First=State->PartialFirst;Output=MoveTemp(State->Partial);return true;
+}
 bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
 {
     auto S=State;if(!S->Scene)return false;
@@ -193,9 +202,13 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
                     {
                         if(S->Readback)
                         {
-                            const uint32 Bytes=S->Scene->Probes.Num()*9*16;
+                            const uint32 Bytes=S->ReadbackProbes*9*16;
                             if(const void* Ptr=S->Readback->Lock(Bytes))
-                            { S->Result.SetNumUninitialized(S->Scene->Probes.Num()*9);FMemory::Memcpy(S->Result.GetData(),Ptr,Bytes);S->Readback->Unlock(); }
+                            {
+                                auto& Destination=S->Scene->ProgressiveProbes?S->ReadbackChunk:S->Result;
+                                Destination.SetNumUninitialized(S->ReadbackProbes*9);FMemory::Memcpy(Destination.GetData(),Ptr,Bytes);S->Readback->Unlock();
+                            }
+                            else S->ReadbackFailed=true;
                         }
                         S->Fence.SafeRelease();
                         if(S->CacheReadback)
@@ -230,8 +243,14 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
         }
         else
         {
+            if(S->Scene->ProgressiveProbes && S->ReadbackChunk.Num()==S->ReadbackProbes*9)
+            {
+                FMemory::Memcpy(S->Result.GetData()+S->Offset*9,S->ReadbackChunk.GetData(),S->ReadbackChunk.Num()*sizeof(FVector4f));
+                S->PartialFirst=S->Offset;S->Partial=MoveTemp(S->ReadbackChunk);
+            }
             S->Offset+=S->Budget;
-            if(S->Offset>=S->Scene->Probes.Num()) { Output=MoveTemp(S->Result);return true; }
+            if(S->Offset>=S->Scene->Probes.Num())
+            { if(S->ReadbackFailed)S->Result.Reset();Output=MoveTemp(S->Result);return true; }
         }
     }
     if(!bAllowSubmission)return false;
@@ -330,7 +349,8 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
             if(S->ReuseIrradiance && S->CacheOffset+S->SubmittedSurfels>=Scene.SurfelSnapshot->ActiveSlots.Num() && !Scene.SurfelBindings.IsEmpty())
             {
                 TShaderMapRef<FPRTDirtyTrianglesCS> DirtyShader(GetGlobalShaderMap(GMaxRHIShaderPlatform));
-                FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Irradiance Dependency Mask"),DirtyShader,P,FIntVector(Scene.SurfelBindings.Num(),1,1));
+                FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Irradiance Dependency Mask"),DirtyShader,P,
+                    FIntVector(FMath::Min(65535,Scene.SurfelBindings.Num()),FMath::DivideAndRoundUp(Scene.SurfelBindings.Num(),65535),1));
             }
         }
         else
@@ -339,11 +359,19 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
         FComputeShaderUtils::AddPass(Graph,RDG_EVENT_NAME("PRT Runtime Probe Transport Cache=%d",P->CacheEnabled),Shader,P,
             FIntVector(FMath::Min(S->Budget,Scene.Probes.Num()-S->Offset),1,1));
         }
-        if(Last)
+        if(Last || (!S->CachePhase && Scene.ProgressiveProbes))
         {
             S->Readback=MakeUnique<FRHIGPUBufferReadback>(TEXT("PRT.Runtime.Readback"));
-            AddEnqueueCopyPass(Graph,S->Readback.Get(),SH,Scene.Probes.Num()*9*16);
-            if(Scene.RegionalTransport)
+            S->ReadbackProbes=Scene.ProgressiveProbes?FMath::Min(S->Budget,Scene.Probes.Num()-S->Offset):Scene.Probes.Num();
+            const uint32 Bytes=S->ReadbackProbes*9*16;
+            if(Scene.ProgressiveProbes)
+            {
+                auto Chunk=Graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(16,S->ReadbackProbes*9),TEXT("PRT.Runtime.ProbeChunk"));
+                AddCopyBufferPass(Graph,Chunk,0,SH,uint64(S->Offset)*9*16,Bytes);
+                AddEnqueueCopyPass(Graph,S->Readback.Get(),Chunk,Bytes);
+            }
+            else AddEnqueueCopyPass(Graph,S->Readback.Get(),SH,Bytes);
+            if(Last && Scene.RegionalTransport)
             { S->StatsReadback=MakeUnique<FRHIGPUBufferReadback>(TEXT("PRT.Cache.QueryStatsReadback"));AddEnqueueCopyPass(Graph,S->StatsReadback.Get(),Graph.RegisterExternalBuffer(S->QueryStats),16); }
         }
         if(Last && Scene.SurfelSnapshot && Scene.ReadCacheForTest)
@@ -352,7 +380,7 @@ bool FRuntimeGPU::Tick(TArray<FVector4f>& Output,bool bAllowSubmission)
             AddEnqueueCopyPass(Graph,S->CacheReadback.Get(),Previous,Scene.SurfelSnapshot->Capacity*16);
         }
         Graph.Execute();
-        if(!Last)
+        if(!Last && (S->CachePhase || !Scene.ProgressiveProbes))
         {
             S->Fence=RHICreateGPUFence(TEXT("PRT.Runtime.SubmissionComplete"));
             RHICmdList.WriteGPUFence(S->Fence);

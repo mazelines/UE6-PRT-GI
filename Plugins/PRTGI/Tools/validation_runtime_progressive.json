@@ -1,0 +1,66 @@
+{
+  "date": "2026-11-05",
+  "build_suffix": 6177,
+  "automation_passed": 21,
+  "option": "r.PRTGI.Runtime.ProgressiveProbes",
+  "default": 0,
+  "probe_batch": 8,
+  "partial_matches_completed": true,
+  "other_rooms_unchanged": true,
+  "cancelled_generation_rejected": true,
+  "first_partial_seconds_observed": 0.764,
+  "completed_seconds_observed": 5.345,
+  "timing_is_benchmark": false,
+  "comparisons": {
+    "cancel_completed-comparison": {
+      "a": "cancel_completed",
+      "b": "cancel_full",
+      "relative_l2": 0.0,
+      "peak_normalized_max": 0.0,
+      "absolute_max": 0.0,
+      "byte_exact": true,
+      "per_room": {
+        "PRTProbeVolume_1": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_2": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_4": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        }
+      }
+    },
+    "completed-comparison": {
+      "a": "completed",
+      "b": "full",
+      "relative_l2": 1.2851673561454629e-09,
+      "peak_normalized_max": 1.0115079291603649e-08,
+      "absolute_max": 0.0039000000033411197,
+      "byte_exact": false,
+      "per_room": {
+        "PRTProbeVolume_1": {
+          "relative_l2": 8.918370031856242e-09,
+          "peak_normalized_max": 5.292965990809947e-08,
+          "absolute_max": 0.0039000000033411197
+        },
+        "PRTProbeVolume_2": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        },
+        "PRTProbeVolume_4": {
+          "relative_l2": 0.0,
+          "peak_normalized_max": 0.0,
+          "absolute_max": 0.0
+        }
+      }
+    }
+  }
+}

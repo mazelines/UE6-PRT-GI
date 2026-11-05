@@ -23,17 +23,28 @@ public:
         // transport radius; a high probe would truncate the analytic hemisphere.
         Scene->Probes={FVector4f(0,0,1,1),FVector4f(0,0,1,1),FVector4f(0,0,-1,1)};
         Scene->Rays=1024;Scene->Bounces=6;
+        Scene->ProgressiveProbes=true;
         GPU=MakeUnique<PRTGI::FRuntimeGPU>();GPU->Submit(Scene,1);
     }
     virtual bool Update()override
     {
         TArray<FVector4f> SH;
-        if(!GPU->Tick(SH))
+        const bool Finished=GPU->Tick(SH);
+        TArray<FVector4f> Partial;int32 First=0;
+        if(GPU->TakePartial(Partial,First))
+        {
+            Test->TestEqual(TEXT("Probe chunks arrive in order"),First,PartialCount);
+            Test->TestEqual(TEXT("One complete SH row per chunk"),Partial.Num(),9);
+            if(Partial.Num()==9)Test->TestEqual(TEXT("Chunk includes computed validity"),Partial[0].W,First<2?1.f:-1.f);
+            PartialCount+=Partial.Num()/9;
+        }
+        if(!Finished)
         {
             if(FPlatformTime::Seconds()-Start<30)return false;
             Test->AddError(TEXT("Runtime GPU analytic readback timed out"));return true;
         }
         if(!Test->TestEqual(TEXT("Three complete probe rows"),SH.Num(),27))return true;
+        Test->TestEqual(TEXT("Every probe published once"),PartialCount,3);
         const float L0=.5f*2*UE_PI*.2820947918f*UE_PI;
         const float L1Z=-.5f*UE_PI*.4886025119f*(2*UE_PI/3);
         Test->TestTrue(FString::Printf(TEXT("Lambert L0: actual %.9g expected %.9g"),SH[0].X,L0),FMath::IsNearlyEqual(SH[0].X,L0,.003f));
@@ -47,6 +58,7 @@ public:
 private:
     FAutomationTestBase* Test;
     double Start;
+    int32 PartialCount=0;
     TUniquePtr<PRTGI::FRuntimeGPU> GPU;
 };
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPRTRuntimeHemisphere,"PRTGI.Runtime.AnalyticHemisphere",
@@ -55,6 +67,34 @@ bool FPRTRuntimeHemisphere::RunTest(const FString&)
 {
     if(GUsingNullRHI) { AddError(TEXT("This test requires a GPU"));return false; }
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FPRTRuntimeHemisphereCommand>(this));
+    return true;
+}
+#endif
+
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPRTPartialPublication,"PRTGI.Runtime.PartialProbePublication",
+    EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
+bool FPRTPartialPublication::RunTest(const FString&)
+{
+    FPRTGIRenderVolume V;V.bRuntimeGeometry=true;V.GridCounts=FIntVector(2);
+    V.GridMin=FVector3f(0);V.GridMax=FVector3f(10);V.ReceiverMax=FVector3f(10);
+    auto Geometry=MakeShared<PRTGI::FMultiBounceData,ESPMode::ThreadSafe>();
+    TArray<FPRTGIRenderVolume> Published,Layout{V,V};
+    TArray<FVector4f> Chunk;Chunk.Init(FVector4f(2,3,4,0),18);Chunk[0].W=1;Chunk[9].W=-1;
+    TestTrue(TEXT("Chunk can cross volume boundaries"),PRTGI::PublishRuntimeProbeRange(Published,Layout,Geometry,7,Chunk));
+    TestEqual(TEXT("Both layouts exist"),Published.Num(),2);
+    TestEqual(TEXT("Uncomputed probe is invalid, not black valid"),Published[0].Coefficients[0].W,-1.f);
+    TestEqual(TEXT("Last probe of first volume ready"),Published[0].Coefficients[63].W,1.f);
+    TestEqual(TEXT("Backface rejection preserved in second volume"),Published[1].Coefficients[0].W,-1.f);
+    TestEqual(TEXT("Second volume receives its RGB"),Published[1].Coefficients[0].X,2.f);
+    TestFalse(TEXT("Out-of-range publication rejected"),PRTGI::PublishRuntimeProbeRange(Published,Layout,Geometry,15,Chunk));
+    Chunk.SetNum(9);Chunk[0].W=1;Chunk[0].X=7;
+    TestTrue(TEXT("Later chunk preserves earlier ready probes"),PRTGI::PublishRuntimeProbeRange(Published,Layout,Geometry,0,Chunk));
+    TestEqual(TEXT("Earlier chunk unchanged"),Published[0].Coefficients[63].X,2.f);
+    TestEqual(TEXT("Later chunk installed"),Published[0].Coefficients[0].X,7.f);
+    Layout[0].GridMin.X=1;
+    TestTrue(TEXT("New layout starts with invalid unpublished rows"),PRTGI::PublishRuntimeProbeRange(Published,Layout,Geometry,0,Chunk));
+    TestEqual(TEXT("Stale ready probe discarded on layout change"),Published[0].Coefficients[63].W,-1.f);
     return true;
 }
 #endif
@@ -149,6 +189,7 @@ public:
             Scene->Geometry->Nodes={FVector4f(-Size,-Size,0,0),FVector4f(Size,Size,0,2)};
             for(int32 I=0;I<128;++I){Scene->Materials.Add(FVector4f(.5f,.5f,.5f,0));Scene->Materials.Add(FVector4f(0,0,1,0));}
             Scene->SurfelBindings={FVector4f(0,1,1,1),FVector4f(0,1,1,1)};
+            if(Stage==20)Scene->SurfelBindings.SetNumZeroed(65536); // Exercise 2D dispatch beyond D3D's X limit.
             Scene->SurfelSnapshot=Snapshot;Scene->ReadCacheForTest=true;
             Iterations=Case==0?1:((Case<3 || Case>=5)?2:8);Alpha=Case==3?.5f:1.f;
             Scene->CacheIterations=Iterations;Scene->CacheRelaxation=Alpha;Scene->CacheBatch=Case==2?256:1;

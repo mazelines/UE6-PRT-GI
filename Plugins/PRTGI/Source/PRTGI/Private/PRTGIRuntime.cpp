@@ -48,6 +48,7 @@ TAutoConsoleVariable<int32> TransportBudgetMB(TEXT("r.PRTGI.Runtime.TransportBud
 TAutoConsoleVariable<int32> RegionalTransport(TEXT("r.PRTGI.Runtime.RegionalTransport"),0,TEXT("Opt-in retained transport queries. Retrace rays intersecting changed instance bounds or their shadow segments. Same participants/materials/lights and stable surface slots required. Irradiance still recomputed globally within each affected room."));
 TAutoConsoleVariable<int32> RegionalIrradiance(TEXT("r.PRTGI.Runtime.RegionalIrradiance"),0,TEXT("Opt-in exact per-sweep history reuse. Recompute sources whose operator or previous-sweep triangle dependencies changed. Implies RegionalTransport; requires a completed compatible history."));
 TAutoConsoleVariable<int32> IrradianceBudgetMB(TEXT("r.PRTGI.Runtime.IrradianceBudgetMB"),16,TEXT("0..256 MiB per room for additional per-sweep irradiance histories and dirty masks. Reuse budgets both old and new histories; fall back to full sweeps if insufficient."));
+TAutoConsoleVariable<int32> ProgressiveProbes(TEXT("r.PRTGI.Runtime.ProgressiveProbes"),0,TEXT("Opt-in chunked probe readback/publication after complete cache sweeps. Never accepts a chunk from an obsolete geometry generation. Extra CPU uploads/readbacks; changes can appear at chunk boundaries."));
 bool NeedsSurfelPool() { return SurfelPoolEnabled.GetValueOnGameThread()!=0 || UseSurfelCache.GetValueOnGameThread()!=0; }
 struct FHash
 {
@@ -305,7 +306,7 @@ uint32 Signature(const TArray<FInstance>& Items,const FRuntimeScene& Scene,uint3
     H.Add(Scene.Rays);H.Add(Scene.Bounces);H.Add(UseSurfelCache.GetValueOnGameThread());
     H.Add(Scene.CacheIterations);H.Add(Scene.CacheRays);H.Add(Scene.CacheBatch);H.Add(Scene.CacheRelaxation);H.Add(Scene.CacheBatchesPerSubmit);H.Add(KeepLighting.GetValueOnGameThread());
     H.Add(KeepGeometryLighting.GetValueOnGameThread());H.Add(Scene.RegionalTransport);H.Add(Scene.ReuseTransport);H.Add(Scene.TransportBudgetBytes);
-    H.Add(Scene.RegionalIrradiance);H.Add(Scene.IrradianceBudgetBytes);return H.Value;
+    H.Add(Scene.RegionalIrradiance);H.Add(Scene.IrradianceBudgetBytes);H.Add(Scene.ProgressiveProbes);return H.Value;
 }
 void SetVolumeStatus(UWorld* World,const FString& Message,const TArray<FPRTGIRenderVolume>& Published,int32 BounceCount,const APRTProbeVolume* Room)
 {
@@ -343,6 +344,7 @@ bool RetainRuntimeLighting(TArray<FPRTGIRenderVolume>& Published,const TArray<FP
     for(auto& V:Published)
     {
         V.Geometry=Geometry;V.GPUCoefficients.Reset();
+        if(ChangedBounds.IsEmpty())continue;
         const auto N=V.GridCounts;
         for(int32 P=0;P<V.Coefficients.Num()/9;++P)
         {
@@ -351,6 +353,33 @@ bool RetainRuntimeLighting(TArray<FPRTGIRenderVolume>& Published,const TArray<FP
             if(ChangedBounds.ContainsByPredicate([&](const FBox& B){return B.IsInsideOrOn(Position);}))
             { V.Coefficients[P*9].W=-1;++NewlyMasked; }
         }
+    }
+    return true;
+}
+
+bool PublishRuntimeProbeRange(TArray<FPRTGIRenderVolume>& Published,const TArray<FPRTGIRenderVolume>& Layout,
+    TSharedPtr<const FMultiBounceData,ESPMode::ThreadSafe> Geometry,int32 First,TConstArrayView<FVector4f> Coefficients)
+{
+    int32 Total=0;for(const auto& V:Layout)Total+=V.GridCounts.X*V.GridCounts.Y*V.GridCounts.Z;
+    if(!Geometry || First<0 || Coefficients.IsEmpty() || Coefficients.Num()%9!=0 || First+Coefficients.Num()/9>Total)return false;
+    for(const auto& C:Coefficients)if(C.ContainsNaN())return false;
+    int32 Ignored=0;
+    if(!RetainRuntimeLighting(Published,Layout,Geometry,{},Ignored))
+    {
+        Published=Layout;
+        for(auto& V:Published)
+        {
+            V.Geometry=Geometry;V.GPUCoefficients.Reset();
+            V.Coefficients.Init(FVector4f(0),V.GridCounts.X*V.GridCounts.Y*V.GridCounts.Z*9);
+            for(int32 P=0;P<V.Coefficients.Num();P+=9)V.Coefficients[P].W=-1;
+        }
+    }
+    int32 Offset=0;
+    for(auto& V:Published)
+    {
+        const int32 Begin=FMath::Max(First*9,Offset),End=FMath::Min(First*9+Coefficients.Num(),Offset+V.Coefficients.Num());
+        if(End>Begin)FMemory::Memcpy(V.Coefficients.GetData()+Begin-Offset,Coefficients.GetData()+Begin-First*9,(End-Begin)*sizeof(FVector4f));
+        Offset+=V.Coefficients.Num();
     }
     return true;
 }
@@ -374,6 +403,8 @@ struct FRuntimeGI::FState
     uint32 Requested=0,Completed=0,PublishedGeometry=0;
     bool PublishedCache=false,HoldingLighting=false;
     int32 PendingMaskedProbes=0;
+    int32 PartialProbes=0,PartialUpdates=0;
+    double FirstPartialSeconds=0;
     int32 Generations=0,AssetBuilds=0,Instances=0,Triangles=0,Discarded=0,ChartUpdates=0;
     double NextScan=0,Started=0,LastSeconds=0,SnapshotMs=0;
     FString Error;
@@ -475,7 +506,9 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
     const double Now=FPlatformTime::Seconds();
     const bool Invalidated=S.Invalidated;S.Invalidated=false;
     TArray<FVector4f> Output;const bool Finished=S.GPU && S.GPU->Tick(Output,bAllowSubmission);
-    if(Now<S.NextScan && !Finished)return false;
+    TArray<FVector4f> Partial;int32 PartialFirst=0;
+    const bool HasPartial=S.GPU && S.GPU->TakePartial(Partial,PartialFirst);
+    if(Now<S.NextScan && !Finished && !HasPartial)return false;
     S.NextScan=Now+.25;
     auto Scene=MakeShared<FRuntimeScene,ESPMode::ThreadSafe>();Scene->Rays=FMath::Clamp(Rays.GetValueOnGameThread(),64,1024);
     Scene->Bounces=FMath::Clamp(Bounces.GetValueOnGameThread(),1,12);Scene->Lights=ReadLights(World);
@@ -486,6 +519,7 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
     Scene->CacheRelaxation=FMath::Clamp(CacheRelaxation.GetValueOnGameThread(),.1f,1.f);
     Scene->RegionalIrradiance=RegionalIrradiance.GetValueOnGameThread()!=0;
     Scene->IrradianceBudgetBytes=uint64(FMath::Clamp(IrradianceBudgetMB.GetValueOnGameThread(),0,256))*1024*1024;
+    Scene->ProgressiveProbes=ProgressiveProbes.GetValueOnGameThread()!=0;
     Scene->RegionalTransport=RegionalTransport.GetValueOnGameThread()!=0 || Scene->RegionalIrradiance;
     Scene->ReuseTransport=ReuseTransport.GetValueOnGameThread()!=0 || Scene->RegionalTransport;
     Scene->TransportBudgetBytes=uint64(FMath::Clamp(TransportBudgetMB.GetValueOnGameThread(),0,512))*1024*1024;
@@ -668,9 +702,21 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
         S.Triangles=Triangles.Num();S.SnapshotMs=(FPlatformTime::Seconds()-Start)*1000;
         S.Job=Scene;S.GPU=MakeUnique<FRuntimeGPU>();S.GPU->Submit(Scene,Budget.GetValueOnGameThread(),History);
         S.Started=Now;++S.Generations;
+        S.PartialProbes=S.PartialUpdates=0;S.FirstPartialSeconds=0;
         SetVolumeStatus(World,TEXT("Runtime reference: updating (no scene precompute)"),S.Published,0,Room);
         UE_LOG(LogPRTRuntime,Display,TEXT("Generation %d: %d instances, %d triangles, %d probes, CPU snapshot %.2f ms"),S.Generations,S.Instances,S.Triangles,Scene->Probes.Num(),S.SnapshotMs);
         return true;
+    }
+    if(HasPartial && !Finished)
+    {
+        if(PublishRuntimeProbeRange(S.Published,S.Job->Volumes,S.Job->Geometry,PartialFirst,Partial))
+        {
+            S.PartialProbes+=Partial.Num()/9;++S.PartialUpdates;
+            if(S.PartialUpdates==1)S.FirstPartialSeconds=Now-S.Started;
+            S.PublishedCache=S.Job->SurfelSnapshot.IsValid();S.PublishedGeometry=GeometrySignature;
+            SetVolumeStatus(World,TEXT("Runtime cache: publishing completed probe ranges"),S.Published,0,Room);
+            return true;
+        }
     }
     if(Finished)
     {
@@ -686,6 +732,11 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
         }
         S.PublishedGeometry=GeometrySignature;S.PublishedCache=S.Job->SurfelSnapshot.IsValid();
         S.Completed=Current;S.LastSeconds=Now-S.Started;
+        if(S.Job->ProgressiveProbes)
+        {
+            S.PartialProbes=S.Job->Probes.Num();++S.PartialUpdates;
+            if(S.PartialUpdates==1)S.FirstPartialSeconds=S.LastSeconds;
+        }
         if(S.Job->SurfelSnapshot) { S.GPU->RetainCacheAndReleaseScratch();S.SolvedCache=MoveTemp(S.GPU); }
         else S.GPU.Reset();
         SetVolumeStatus(World,S.Job->SurfelSnapshot?TEXT("Runtime cache: ready (iterative surfel irradiance)"):TEXT("Runtime reference: ready (triangle BVH)"),S.Published,S.Job->SurfelSnapshot?0:S.Job->Bounces,Room);
@@ -707,8 +758,8 @@ FString FRuntimeGI::Status()const
         }
         return Result;
     }
-    return FString::Printf(TEXT("RuntimeReference=%d Assets=%d AssetBuilds=%d Instances=%d Triangles=%d Probes=%d Generation=%d Discarded=%d Pending=%d Published=%d ChartUpdates=%d SnapshotMs=%.3f ConvergenceSeconds=%.3f Error=%s %s SurfelError=%s LastAudit=[%s] SurfelCache=%d CacheIterations=%d CacheRays=%d CacheRelaxation=%.3f CacheRetained=%d HoldingLighting=%d PendingMaskedProbes=%d LightingGeometryCurrent=%d CacheBatchesPerSubmit=%d %s"),
-        IsEnabled(),S.Assets.Num(),S.AssetBuilds,S.Instances,S.Triangles,S.Job?S.Job->Probes.Num():0,S.Generations,S.Discarded,S.GPU?1:0,S.Published.Num(),S.ChartUpdates,S.SnapshotMs,S.LastSeconds,*S.Error,
+    return FString::Printf(TEXT("RuntimeReference=%d Assets=%d AssetBuilds=%d Instances=%d Triangles=%d Probes=%d Generation=%d Discarded=%d Pending=%d Published=%d ChartUpdates=%d SnapshotMs=%.3f ConvergenceSeconds=%.3f PartialProbes=%d PartialUpdates=%d FirstPartialSeconds=%.3f Error=%s %s SurfelError=%s LastAudit=[%s] SurfelCache=%d CacheIterations=%d CacheRays=%d CacheRelaxation=%.3f CacheRetained=%d HoldingLighting=%d PendingMaskedProbes=%d LightingGeometryCurrent=%d CacheBatchesPerSubmit=%d %s"),
+        IsEnabled(),S.Assets.Num(),S.AssetBuilds,S.Instances,S.Triangles,S.Job?S.Job->Probes.Num():0,S.Generations,S.Discarded,S.GPU?1:0,S.Published.Num(),S.ChartUpdates,S.SnapshotMs,S.LastSeconds,S.PartialProbes,S.PartialUpdates,S.FirstPartialSeconds,*S.Error,
         S.Surfels?*S.Surfels->Status():TEXT("SurfelPool=disabled"),*S.SurfelError,*S.LastSurfelAudit,UseSurfelCache.GetValueOnGameThread(),CacheIterations.GetValueOnGameThread(),CacheRays.GetValueOnGameThread(),CacheRelaxation.GetValueOnGameThread(),S.SolvedCache?1:0,S.HoldingLighting?1:0,S.HoldingLighting?S.PendingMaskedProbes:0,
         S.Job && !S.Published.IsEmpty() && !S.Published.ContainsByPredicate([&](const auto& V){return V.Geometry!=S.Job->Geometry;}),CacheBatchesPerSubmit.GetValueOnGameThread(),S.GPU?*S.GPU->Progress():(S.SolvedCache?*S.SolvedCache->Progress():TEXT("")));
 }

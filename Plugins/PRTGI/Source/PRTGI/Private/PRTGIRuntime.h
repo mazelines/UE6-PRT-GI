@@ -13,6 +13,8 @@ bool RetainRuntimeLighting(TArray<FPRTGIRenderVolume>& Published,
     const TArray<FPRTGIRenderVolume>& Layout,
     TSharedPtr<const FMultiBounceData,ESPMode::ThreadSafe> Geometry,
     const TArray<FBox>& ChangedBounds,int32& NewlyMasked);
+bool PublishRuntimeProbeRange(TArray<FPRTGIRenderVolume>& Published,const TArray<FPRTGIRenderVolume>& Layout,
+    TSharedPtr<const FMultiBounceData,ESPMode::ThreadSafe> Geometry,int32 First,TConstArrayView<FVector4f> Coefficients);
 // PC live transport with reference path tracing and an optional iterative
 // surface irradiance cache. Both use triangle BVH traversal. Asset charts are
 // prepared once; no scene transfer matrix or evaluated light is stored on disk.
@@ -66,6 +68,7 @@ struct FRuntimeScene
     bool ReuseTransport=false;
     bool RegionalTransport=false;
     bool RegionalIrradiance=false;
+    bool ProgressiveProbes=false;
     uint64 IrradianceBudgetBytes=16ull*1024*1024;
     FBox3f ChangedBounds{ForceInit};
     TArray<uint32> OldToNewTriangles;
@@ -89,6 +92,7 @@ public:
     // the whole scene; a caller must reject obsolete layout/light generations.
     bool Tick(TArray<FVector4f>& Output, bool bAllowSubmission=true);
     bool HasPendingSubmission() const;
+    bool TakePartial(TArray<FVector4f>& Output,int32& First);
     const TArray<FVector4f>& CacheResultForTest() const;
     FString Progress() const;
     // Call only after Tick has returned the completed probe output.

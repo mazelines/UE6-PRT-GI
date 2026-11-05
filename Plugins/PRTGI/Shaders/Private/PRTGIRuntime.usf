@@ -349,7 +349,7 @@ void CacheCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
 [numthreads(64,1,1)]
 void DirtyTrianglesCS(uint3 Group:SV_GroupID,uint Lane:SV_GroupIndex)
 {
-    uint Triangle=Group.x;if(Triangle>=TriangleCount)return;
+    uint Triangle=Group.x+Group.y*65535;if(Triangle>=TriangleCount)return;
     if(Lane==0)DirtyGroupFlag=0;
     GroupMemoryBarrierWithGroupSync();
     float4 Binding=SurfelBindings[Triangle];
