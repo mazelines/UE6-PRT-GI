@@ -41,6 +41,7 @@ TAutoConsoleVariable<int32> CacheBatch(TEXT("r.PRTGI.Runtime.CacheBatch"),256,TE
 TAutoConsoleVariable<float> CacheRelaxation(TEXT("r.PRTGI.Runtime.CacheRelaxation"),1.f,TEXT("0.1..1 Jacobi relaxation. Values below 1 converge more slowly and do not represent a fixed bounce count."));
 TAutoConsoleVariable<int32> CacheBatchesPerSubmit(TEXT("r.PRTGI.Runtime.CacheBatchesPerSubmit"),8,TEXT("1..32 cache dispatches per GPU submission, never crossing a Jacobi sweep. Fixed work count, not ms."));
 TAutoConsoleVariable<int32> KeepLighting(TEXT("r.PRTGI.Runtime.KeepLightingWhileUpdating"),1,TEXT("Keep published cache lighting while geometry/probe layout is unchanged. Geometry edits still clear old GI."));
+TAutoConsoleVariable<int32> KeepGeometryLighting(TEXT("r.PRTGI.Runtime.KeepLightingOnGeometryChange"),0,TEXT("Opt-in stale SH display during geometry updates. Use current visibility BVH and reject probes inside edited instance bounds. Requires unchanged probe layout and KeepLightingWhileUpdating. Indirect lighting changes remain delayed until publication."));
 TAutoConsoleVariable<int32> RoomsEnabled(TEXT("r.PRTGI.Runtime.Rooms"),0,TEXT("Opt-in independent room jobs. Each enabled volume requires explicit Runtime Included Actors or Participant Tags. Shared lights affect all rooms."));
 TAutoConsoleVariable<int32> ReuseTransport(TEXT("r.PRTGI.Runtime.ReuseTransport"),0,TEXT("Cache ray hits and direct irradiance within one immutable lighting generation. Retrace after geometry/light changes. Experimental PC memory/performance tradeoff."));
 TAutoConsoleVariable<int32> TransportBudgetMB(TEXT("r.PRTGI.Runtime.TransportBudgetMB"),64,TEXT("0..512 MiB per room/job for transport queries; 32 bytes per ray, or 48 for regional history. Regional reuse also budgets the old table. Over-budget jobs fall back; regional histories remain after projection."));
@@ -301,7 +302,7 @@ uint32 Signature(const TArray<FInstance>& Items,const FRuntimeScene& Scene,uint3
     for(const auto& L:Scene.Lights)H.Add(L);
     H.Add(Scene.Rays);H.Add(Scene.Bounces);H.Add(UseSurfelCache.GetValueOnGameThread());
     H.Add(Scene.CacheIterations);H.Add(Scene.CacheRays);H.Add(Scene.CacheBatch);H.Add(Scene.CacheRelaxation);H.Add(Scene.CacheBatchesPerSubmit);H.Add(KeepLighting.GetValueOnGameThread());
-    H.Add(Scene.RegionalTransport);H.Add(Scene.ReuseTransport);H.Add(Scene.TransportBudgetBytes);return H.Value;
+    H.Add(KeepGeometryLighting.GetValueOnGameThread());H.Add(Scene.RegionalTransport);H.Add(Scene.ReuseTransport);H.Add(Scene.TransportBudgetBytes);return H.Value;
 }
 void SetVolumeStatus(UWorld* World,const FString& Message,const TArray<FPRTGIRenderVolume>& Published,int32 BounceCount,const APRTProbeVolume* Room)
 {
@@ -323,6 +324,34 @@ void SetVolumeStatus(UWorld* World,const FString& Message,const TArray<FPRTGIRen
 }
 }
 
+bool RetainRuntimeLighting(TArray<FPRTGIRenderVolume>& Published,const TArray<FPRTGIRenderVolume>& Layout,
+    TSharedPtr<const FMultiBounceData,ESPMode::ThreadSafe> Geometry,const TArray<FBox>& ChangedBounds,int32& NewlyMasked)
+{
+    NewlyMasked=0;
+    if(!Geometry || Published.IsEmpty() || Published.Num()!=Layout.Num())return false;
+    for(int32 I=0;I<Published.Num();++I)
+    {
+        const auto& A=Published[I];const auto& B=Layout[I];
+        if(!A.bRuntimeGeometry || A.GridCounts!=B.GridCounts || A.GridMin!=B.GridMin || A.GridMax!=B.GridMax ||
+            A.ReceiverMin!=B.ReceiverMin || A.ReceiverMax!=B.ReceiverMax || A.Priority!=B.Priority ||
+            A.BlendFace!=B.BlendFace || A.BlendDistance!=B.BlendDistance ||
+            A.Coefficients.Num()!=A.GridCounts.X*A.GridCounts.Y*A.GridCounts.Z*9)return false;
+    }
+    for(auto& V:Published)
+    {
+        V.Geometry=Geometry;V.GPUCoefficients.Reset();
+        const auto N=V.GridCounts;
+        for(int32 P=0;P<V.Coefficients.Num()/9;++P)
+        {
+            if(V.Coefficients[P*9].W<0)continue;
+            const FVector Position(V.GridMin+(V.GridMax-V.GridMin)*FVector3f(float(P%N.X)/(N.X-1),float((P/N.X)%N.Y)/(N.Y-1),float(P/(N.X*N.Y))/(N.Z-1)));
+            if(ChangedBounds.ContainsByPredicate([&](const FBox& B){return B.IsInsideOrOn(Position);}))
+            { V.Coefficients[P*9].W=-1;++NewlyMasked; }
+        }
+    }
+    return true;
+}
+
 struct FRuntimeGI::FState
 {
     TWeakObjectPtr<UWorld> World;
@@ -341,6 +370,7 @@ struct FRuntimeGI::FState
     TArray<FPRTGIRenderVolume> Published;
     uint32 Requested=0,Completed=0,PublishedGeometry=0;
     bool PublishedCache=false,HoldingLighting=false;
+    int32 PendingMaskedProbes=0;
     int32 Generations=0,AssetBuilds=0,Instances=0,Triangles=0,Discarded=0,ChartUpdates=0;
     double NextScan=0,Started=0,LastSeconds=0,SnapshotMs=0;
     FString Error;
@@ -508,12 +538,16 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
     if(Current!=S.Requested || !S.Job)
     {
         const bool HadOutput=Invalidated || !S.Published.IsEmpty();
-        S.HoldingLighting=KeepLighting.GetValueOnGameThread()!=0 && UseSurfelCache.GetValueOnGameThread()!=0 &&
-            S.PublishedCache && S.PublishedGeometry==GeometrySignature && !S.Published.IsEmpty();
-        if(!S.HoldingLighting)S.Published.Reset();
+        const bool CanHold=KeepLighting.GetValueOnGameThread()!=0 && UseSurfelCache.GetValueOnGameThread()!=0 &&
+            S.PublishedCache && (S.PublishedGeometry==GeometrySignature || KeepGeometryLighting.GetValueOnGameThread()!=0) && !S.Published.IsEmpty();
+        S.HoldingLighting=false;
+        if(!CanHold){S.Published.Reset();S.PendingMaskedProbes=0;}
         const auto OldScene=S.Job;
         TSharedPtr<FRuntimeTransportHistory,ESPMode::ThreadSafe> History;
         TArray<FInstanceRecord> Records;
+        TArray<FBox> DisplayChangedBounds;
+        auto AddDisplayBounds=[&](const FBox& B)
+        { if(B.IsValid)DisplayChangedBounds.Add(B.ExpandBy(1.+8*FLT_EPSILON*FMath::Max(B.Min.GetAbsMax(),B.Max.GetAbsMax()))); };
         bool Compatible=Scene->RegionalTransport && S.SolvedCache && OldScene && OldScene->RegionalTransport &&
             OldScene->Lights==Scene->Lights && OldScene->CacheRays==Scene->CacheRays && Items.Num()==S.JobInstances.Num();
         FBox Changed(ForceInit);
@@ -533,6 +567,22 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
                 else if(!Old.Transform.Equals(Record.Transform,0)) { Changed+=Old.Bounds;Changed+=Record.Bounds; }
             }
             Records.Add(MoveTemp(Record));
+        }
+        // Compare by stable identity, also handling insertion/removal and edits
+        // while an earlier lighting job is still pending. Masks accumulate until
+        // a completed generation replaces the stale publication.
+        if(CanHold)
+        {
+            TMap<FSurfelOwnerKey,const FInstanceRecord*> OldRecords;
+            for(const auto& R:S.JobInstances)OldRecords.Add(R.Owner,&R);
+            for(const auto& R:Records)
+            {
+                const auto* Old=OldRecords.FindRef(R.Owner);
+                if(!Old || Old->AssetKey!=R.AssetKey || Old->Shadow!=R.Shadow || !Old->Transform.Equals(R.Transform,0))
+                { AddDisplayBounds(R.Bounds);if(Old)AddDisplayBounds(Old->Bounds); }
+                OldRecords.Remove(R.Owner);
+            }
+            for(const auto& Pair:OldRecords)AddDisplayBounds(Pair.Value->Bounds);
         }
         if(Compatible)
         {
@@ -588,6 +638,13 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
             Scene->Geometry->Triangles.Append({FVector4f(T.A,T.Shadow?1:0),FVector4f(T.B-T.A,0),FVector4f(T.C-T.A,0)});
             Scene->Materials.Append(T.Samples,128);Scene->SurfelBindings.Add(T.SurfelBinding);
         }
+        if(CanHold)
+        {
+            int32 Masked=0;
+            S.HoldingLighting=RetainRuntimeLighting(S.Published,Scene->Volumes,Scene->Geometry,DisplayChangedBounds,Masked);
+            if(S.HoldingLighting)S.PendingMaskedProbes+=Masked;
+            else { S.Published.Reset();S.PendingMaskedProbes=0; }
+        }
         if(UseSurfelCache.GetValueOnGameThread()!=0)Scene->SurfelSnapshot=S.Surfels->CaptureLightingSnapshot();
         if(History && OldScene)
         {
@@ -614,7 +671,7 @@ bool FRuntimeGI::TickInternal(UWorld* World,bool bAllowSubmission)
     {
         if(Output.Num()!=S.Job->Probes.Num()*9 || Output.ContainsByPredicate([](const auto& C){return C.ContainsNaN();}))
         { S.Error=TEXT("GPU readback failed or returned non-finite SH");S.GPU.Reset();S.Published.Reset();S.HoldingLighting=false;SetVolumeStatus(World,S.Error,S.Published,0,Room);return true; }
-        S.Published.Reset();S.HoldingLighting=false;
+        S.Published.Reset();S.HoldingLighting=false;S.PendingMaskedProbes=0;
         int32 Offset=0;
         for(auto V:S.Job->Volumes)
         {
@@ -645,9 +702,10 @@ FString FRuntimeGI::Status()const
         }
         return Result;
     }
-    return FString::Printf(TEXT("RuntimeReference=%d Assets=%d AssetBuilds=%d Instances=%d Triangles=%d Probes=%d Generation=%d Discarded=%d Pending=%d Published=%d ChartUpdates=%d SnapshotMs=%.3f ConvergenceSeconds=%.3f Error=%s %s SurfelError=%s LastAudit=[%s] SurfelCache=%d CacheIterations=%d CacheRays=%d CacheRelaxation=%.3f CacheRetained=%d HoldingLighting=%d CacheBatchesPerSubmit=%d %s"),
+    return FString::Printf(TEXT("RuntimeReference=%d Assets=%d AssetBuilds=%d Instances=%d Triangles=%d Probes=%d Generation=%d Discarded=%d Pending=%d Published=%d ChartUpdates=%d SnapshotMs=%.3f ConvergenceSeconds=%.3f Error=%s %s SurfelError=%s LastAudit=[%s] SurfelCache=%d CacheIterations=%d CacheRays=%d CacheRelaxation=%.3f CacheRetained=%d HoldingLighting=%d PendingMaskedProbes=%d LightingGeometryCurrent=%d CacheBatchesPerSubmit=%d %s"),
         IsEnabled(),S.Assets.Num(),S.AssetBuilds,S.Instances,S.Triangles,S.Job?S.Job->Probes.Num():0,S.Generations,S.Discarded,S.GPU?1:0,S.Published.Num(),S.ChartUpdates,S.SnapshotMs,S.LastSeconds,*S.Error,
-        S.Surfels?*S.Surfels->Status():TEXT("SurfelPool=disabled"),*S.SurfelError,*S.LastSurfelAudit,UseSurfelCache.GetValueOnGameThread(),CacheIterations.GetValueOnGameThread(),CacheRays.GetValueOnGameThread(),CacheRelaxation.GetValueOnGameThread(),S.SolvedCache?1:0,S.HoldingLighting?1:0,CacheBatchesPerSubmit.GetValueOnGameThread(),S.GPU?*S.GPU->Progress():(S.SolvedCache?*S.SolvedCache->Progress():TEXT("")));
+        S.Surfels?*S.Surfels->Status():TEXT("SurfelPool=disabled"),*S.SurfelError,*S.LastSurfelAudit,UseSurfelCache.GetValueOnGameThread(),CacheIterations.GetValueOnGameThread(),CacheRays.GetValueOnGameThread(),CacheRelaxation.GetValueOnGameThread(),S.SolvedCache?1:0,S.HoldingLighting?1:0,S.HoldingLighting?S.PendingMaskedProbes:0,
+        S.Job && !S.Published.IsEmpty() && !S.Published.ContainsByPredicate([&](const auto& V){return V.Geometry!=S.Job->Geometry;}),CacheBatchesPerSubmit.GetValueOnGameThread(),S.GPU?*S.GPU->Progress():(S.SolvedCache?*S.SolvedCache->Progress():TEXT("")));
 }
 FString FRuntimeGI::AuditSurfels()
 {

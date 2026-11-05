@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-05",
+  "build_suffix": 6175,
+  "automation_passed": 20,
+  "option": "r.PRTGI.Runtime.KeepLightingOnGeometryChange",
+  "default": 0,
+  "sequence_cm_x": [
+    315,
+    355,
+    395,
+    435
+  ],
+  "pending": [
+    {
+      "Generation": "3",
+      "Discarded": "1",
+      "Published": "1",
+      "HoldingLighting": "1",
+      "PendingMaskedProbes": "12",
+      "LightingGeometryCurrent": "1"
+    },
+    {
+      "Generation": "4",
+      "Discarded": "2",
+      "Published": "1",
+      "HoldingLighting": "1",
+      "PendingMaskedProbes": "18",
+      "LightingGeometryCurrent": "1"
+    },
+    {
+      "Generation": "5",
+      "Discarded": "3",
+      "Published": "1",
+      "HoldingLighting": "1",
+      "PendingMaskedProbes": "24",
+      "LightingGeometryCurrent": "1"
+    },
+    {
+      "Generation": "6",
+      "Discarded": "4",
+      "Published": "1",
+      "HoldingLighting": "1",
+      "PendingMaskedProbes": "30",
+      "LightingGeometryCurrent": "1"
+    }
+  ],
+  "other_two_rooms_unchanged": true,
+  "comparison": {
+    "a": "completed",
+    "b": "full",
+    "relative_l2": 0.0,
+    "peak_normalized_max": 0.0,
+    "absolute_max": 0.0,
+    "byte_exact": true,
+    "per_room": {
+      "PRTProbeVolume_1": {
+        "relative_l2": 0.0,
+        "peak_normalized_max": 0.0,
+        "absolute_max": 0.0
+      },
+      "PRTProbeVolume_2": {
+        "relative_l2": 0.0,
+        "peak_normalized_max": 0.0,
+        "absolute_max": 0.0
+      },
+      "PRTProbeVolume_4": {
+        "relative_l2": 0.0,
+        "peak_normalized_max": 0.0,
+        "absolute_max": 0.0
+      }
+    }
+  },
+  "limits": [
+    "Stale indirect energy remains until new lighting completes; current BVH only fixes visibility paths.",
+    "Probes in accumulated old/new bounds are suppressed; local dark areas are possible.",
+    "Probe layout or volume selection changes reject retention."
+  ]
+}

@@ -7,6 +7,12 @@ class UWorld;
 class APRTProbeVolume;
 namespace PRTGI
 {
+// Preserve CPU SH only for an identical probe layout. Resolve visibility always
+// uses current geometry; old/new edited bounds conservatively reject probes.
+bool RetainRuntimeLighting(TArray<FPRTGIRenderVolume>& Published,
+    const TArray<FPRTGIRenderVolume>& Layout,
+    TSharedPtr<const FMultiBounceData,ESPMode::ThreadSafe> Geometry,
+    const TArray<FBox>& ChangedBounds,int32& NewlyMasked);
 // PC live transport with reference path tracing and an optional iterative
 // surface irradiance cache. Both use triangle BVH traversal. Asset charts are
 // prepared once; no scene transfer matrix or evaluated light is stored on disk.

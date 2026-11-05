@@ -59,6 +59,39 @@ bool FPRTRuntimeHemisphere::RunTest(const FString&)
 }
 #endif
 
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPRTPendingLighting,"PRTGI.Runtime.PendingLightingValidity",
+    EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
+bool FPRTPendingLighting::RunTest(const FString&)
+{
+    FPRTGIRenderVolume V;V.bRuntimeGeometry=true;V.GridCounts=FIntVector(2);
+    V.GridMin=FVector3f(0);V.GridMax=FVector3f(10);V.ReceiverMax=FVector3f(10);
+    V.Coefficients.Init(FVector4f(4,3,2,0),72);
+    for(int32 P=0;P<8;++P)V.Coefficients[P*9].W=1;
+    V.Coefficients[9].W=-1;
+    auto Old=MakeShared<PRTGI::FMultiBounceData,ESPMode::ThreadSafe>();V.Geometry=Old;
+    auto Current=MakeShared<PRTGI::FMultiBounceData,ESPMode::ThreadSafe>();
+    TArray<FPRTGIRenderVolume> Published{V},Layout{V};int32 Masked=0;
+    TestTrue(TEXT("Same layout retains lighting"),PRTGI::RetainRuntimeLighting(Published,Layout,Current,{FBox(FVector(-1),FVector(1))},Masked));
+    TestEqual(TEXT("Only newly unsafe probe counted"),Masked,1);
+    TestTrue(TEXT("Resolve uses latest BVH before lighting completes"),Published[0].Geometry==Current);
+    TestEqual(TEXT("Edited-region probe rejected"),Published[0].Coefficients[0].W,-1.f);
+    TestEqual(TEXT("Previously invalid probe stays invalid"),Published[0].Coefficients[9].W,-1.f);
+    TestEqual(TEXT("Distant valid probe retained"),Published[0].Coefficients[63].W,1.f);
+    TestTrue(TEXT("Stale radiance itself is preserved"),FVector3f(Published[0].Coefficients[0])==FVector3f(4,3,2));
+    TestTrue(TEXT("Second pending edit retains previous masks"),PRTGI::RetainRuntimeLighting(Published,Layout,Current,{FBox(FVector(9),FVector(11))},Masked));
+    TestEqual(TEXT("Second changed region counted once"),Masked,1);
+    TestEqual(TEXT("First region remains masked during cancellation"),Published[0].Coefficients[0].W,-1.f);
+    TestEqual(TEXT("Second region masked"),Published[0].Coefficients[63].W,-1.f);
+    Layout[0].GridMin.X=1;
+    TestFalse(TEXT("Moved probe layout cannot inherit old SH"),PRTGI::RetainRuntimeLighting(Published,Layout,Current,{},Masked));
+    Layout[0]=V;Layout[0].Priority=2;
+    TestFalse(TEXT("Changed volume selection rejects retention"),PRTGI::RetainRuntimeLighting(Published,Layout,Current,{},Masked));
+    TestFalse(TEXT("Missing geometry rejects retention"),PRTGI::RetainRuntimeLighting(Published,{V},nullptr,{},Masked));
+    return true;
+}
+#endif
+
 #include "PRTGIRuntime.h"
 #include "PRTGIRuntimeSurfel.h"
 #include "PRTGIMultiBounce.h"

@@ -354,6 +354,14 @@ exec(open(unreal.Paths.project_dir() + "Plugins/PRTGI/Tools/setup_regional_valid
 
 이 경로는 비트 단위 일치를 보장하지 않는다. 비교는 덤프된 CSV의 프로브 유효성과 방별 SH를 사용하며, 재사용 비율을 프레임 속도 향상률로 해석해서는 안 된다. 모바일 메모리·대역폭 및 연속 이동 중 품질은 후속 검증 대상이다.
 
+## 갱신 중 이전 조명 유지 — 2026-11-05
+
+`r.PRTGI.Runtime.KeepLightingOnGeometryChange=1`은 프로브 배치가 같은 가구 이동·추가·삭제 중에도 기존 SH를 표시한다. `KeepLightingWhileUpdating=1`과 Surfel 캐시가 필요하며 기본값은 0이다. 화면 합성에는 새 BVH를 즉시 연결하고, 변경된 인스턴스의 이전·현재 경계 안에 들어간 프로브는 제외한다. 연속 이동으로 계산이 취소되면 제외한 프로브를 누적 유지하고, 새 계산이 완료되면 새 유효성과 SH로 교체한다. 프로브 배치나 볼륨 선택 조건이 바뀌면 이전 조명을 유지하지 않는다.
+
+UE6 빌드와 자동화 20개가 통과했다. ClassicBox 가구를 네 번 연속 이동하는 동안 `Pending=1 Published=1 HoldingLighting=1 LightingGeometryCurrent=1`을 확인했고, 제외된 프로브는 최종 30개였다. 다른 두 방의 SH는 변하지 않았고, 마지막 전체 재계산 비교는 일치했다. [검증 보고서](../Plugins/PRTGI/Tools/validation_runtime_pending.json)
+
+이 기능은 갱신 대기 중 화면 연속성을 위한 근사다. 새 BVH는 프로브와 표면 사이의 차폐를 반영하지만, 이전 간접광 에너지나 색 번짐까지 즉시 고치지는 않는다. 제외된 프로브 주변은 일시적으로 어두워질 수 있다. 이후 지역 irradiance 갱신과 부분 게시로 이 대기 시간을 줄인다.
+
 ## 지원 범위와 남은 작업
 
 현재 지원하는 것은 불투명 정적 메시 자산의 인스턴스 변환과 방향광·역제곱 감쇠 포인트 라이트다. 메시의 Mobility는 Movable이어도 된다. 포인트 라이트 밝기는 UE의 단위 변환을 사용하고 cm를 m로 환산한다. 광원의 색온도와 간접광 강도를 반영한다.
